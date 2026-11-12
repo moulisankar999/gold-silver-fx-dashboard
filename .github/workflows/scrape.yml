@@ -1,0 +1,68 @@
+name: Scrape rates
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'           # every 10 min, all day (spot/FX/MCX)
+    - cron: '5,15,25 4 * * *'        # MJDTA morning print ~9:30 AM IST (04:00 UTC)
+    - cron: '5,15,25 10 * * *'       # MJDTA afternoon print ~3:30 PM IST (10:00 UTC)
+    - cron: '38,44,52 6 * * 1-5'     # IBJA AM print ~12:05 PM IST (06:35 UTC)
+    - cron: '33,38,45 11 * * 1-5'    # IBJA PM print ~5:00 PM IST (11:30 UTC)
+    - cron: '0 3 1 * *'              # monthly keep-alive (re-enables this schedule)
+  workflow_dispatch:
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install --quiet requests beautifulsoup4
+
+      - name: Load previous data (data branch)
+        run: |
+          mkdir -p prev
+          if git ls-remote --exit-code origin refs/heads/data >/dev/null 2>&1; then
+            git fetch --quiet --depth=1 origin data
+            git show FETCH_HEAD:data/latest.json  > prev/latest.json  || true
+            git show FETCH_HEAD:data/history.json > prev/history.json || true
+          fi
+
+      - name: Scrape
+        id: scrape
+        run: python scraper/scrape.py --prev prev --out out/data
+
+      - name: Publish to data branch (single commit, only when values changed)
+        if: steps.scrape.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          git init -q -b data
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf 'Scraped rates for the dashboard. Rewritten as one commit on each change.\n' > README.md
+          git add -A
+          git commit -q -m "data $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
+
+      - name: Keep schedule alive
+        if: github.event.schedule == '0 3 1 * *'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/scrape.yml/enable" || true

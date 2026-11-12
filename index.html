@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gold · Silver · FX — Live</title>
+<meta name="description" content="Live Chennai, IBJA, MCX, spot gold and silver, and FX in INR.">
+<meta name="theme-color" content="#0b0f17">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="stylesheet" href="assets/app.css">
+<script>try{var t=localStorage.getItem('gsfx-theme');if(!t)t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="assets/icon.svg" alt="" width="34" height="34">
+    <div><h1>Gold · Silver · FX</h1><p class="sub" id="clock">—</p></div>
+  </div>
+  <div class="actions">
+    <div class="seg" role="radiogroup" aria-label="Unit" id="unitSeg">
+      <button data-unit="g" role="radio">1 g</button>
+      <button data-unit="10g" role="radio">10 g</button>
+      <button data-unit="kg" role="radio">1 kg</button>
+    </div>
+    <button class="icon-btn" id="themeBtn" aria-label="Toggle dark or light mode" title="Dark / light">◐</button>
+    <button class="refresh" id="refreshBtn" aria-label="Refresh now"><span class="spin">↻</span> <span id="countdown">--</span></button>
+  </div>
+</header>
+<div class="ticker" aria-label="Price ticker"><div class="ticker-track" id="ticker"></div></div>
+
+<main id="app">
+  <div class="statusbar" id="statusbar"></div>
+  <section class="sec" id="chennai"></section>
+  <section class="sec" id="ibja"></section>
+  <section class="sec" id="mcx"></section>
+  <section class="sec" id="spot"></section>
+  <section class="sec" id="fx"></section>
+  <section class="sec" id="breakdown"></section>
+  <section class="sec" id="sources"></section>
+</main>
+<footer class="foot">
+  <p class="disclaimer">Shop price = IBJA + premium + 3% GST; not financial advice.</p>
+  <p class="muted small">Times shown in MYT (UTC+8) with IST (UTC+5:30). Every figure shows its source and its own update time. Nothing here is estimated unless marked “calculated”.</p>
+</footer>
+<script type="module" src="assets/app.js"></script>
+</body>
+</html>
