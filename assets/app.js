@@ -2,6 +2,7 @@ import {
   UNIT_FACTOR, DUTY, OZ_PER_KG, toUnit, spotToInr, gold24From22, ibjaGoldPerG, ibjaSilverPerG,
   silverLanded, markup, pctChange, fmtMytIst, ageMinutes, fmtAge, mcxSession, ibjaWindow,
   ibjaExpectedDate, mjdtaStale, fmtINR, fmtNum, fmtUSD, dpFor, zoneParts, IST_OFFSET_MIN, MYT_OFFSET_MIN,
+  simpleRow, DUTY_SOURCE, G_PER_OZ,
 } from './calc.js';
 
 // ------------------------------------------------------------ config
@@ -141,6 +142,7 @@ const FX_DEF = {
   EURINR: { label: '1 EUR', unit: '₹', base: 'EUR', quote: 'INR' },
   AEDINR: { label: '1 AED', unit: '₹', base: 'AED', quote: 'INR' },
   SGDMYR: { label: '1 SGD', unit: 'RM', base: 'SGD', quote: 'MYR' },
+  GBPMYR: { label: '1 GBP', unit: 'RM', base: 'GBP', quote: 'MYR' },
 };
 function crossFromUsd(rates, base, quote) { // rates: USD->X
   const r = (c) => (c === 'USD' ? 1 : rates?.[c]);
@@ -354,7 +356,7 @@ function renderFx() {
     if (!r) return card({ label: `${d.label} in ${d.quote}`, value: '—', badges: [badge('na', 'Unavailable')], foot: 'No FX source responded' });
     const stale = ageMinutes(r.t) > STALE[r.kind];
     const pc = r.prevClose ? pctChange(r.rate, r.prevClose) : null;
-    const dp = k === 'SGDMYR' ? 4 : 3;
+    const dp = k.endsWith('MYR') ? 4 : 3;
     const fmt = (x) => `${d.unit}${fmtNum(x, dp)}`;
     return card({ label: `${d.label} → ${d.quote}`, value: fmt(r.rate),
       change: pc ? chg(pc.abs, pc.pct, (x) => fmtNum(x, dp), 'vs prev close') : '',
@@ -426,7 +428,7 @@ function tickerItems() {
     const ps = pctChange(L.cur.vals.s999, L.prev?.vals?.s999); push(`IBJA Silver ${L.cur.sess}`, inr(toUnit(L.cur.vals.s999 / 1000, u)), ps ? toUnit(ps.abs / 1000, u) : null, ps?.pct); }
   for (const m of ['gold', 'silver']) { const q = SRC(`mcx_${m}`)?.data; if (q) { const div = m === 'gold' ? 10 : 1000; push(`MCX ${m === 'gold' ? 'Gold' : 'Silver'} Fut`, inr(toUnit(q.ltp / div, u)), toUnit(q.change / div, u), q.changePct); } }
   for (const m of ['xau', 'xag']) { const s = resolveSpot(m); if (s) { const pv = prevDistinct(`spot_${m}`, s.usd); const pc = pv ? pctChange(s.usd, pv.v) : null; push(m === 'xau' ? 'Gold $/oz' : 'Silver $/oz', fmtUSD(s.usd, m === 'xau' ? 2 : 3), pc?.abs, pc?.pct); } }
-  for (const k of ['USDINR', 'MYRINR', 'SGDINR', 'GBPINR', 'EURINR', 'AEDINR', 'SGDMYR']) { const r = resolveFx(k); if (r) { const pc = r.prevClose ? pctChange(r.rate, r.prevClose) : null; push(`${k.slice(0, 3)}/${k.slice(3)}`, fmtNum(r.rate, k === 'SGDMYR' ? 4 : 3), pc?.abs, pc?.pct); } }
+  for (const k of ['USDINR', 'MYRINR', 'SGDINR', 'GBPINR', 'EURINR', 'AEDINR', 'SGDMYR', 'GBPMYR']) { const r = resolveFx(k); if (r) { const pc = r.prevClose ? pctChange(r.rate, r.prevClose) : null; push(`${k.slice(0, 3)}/${k.slice(3)}`, fmtNum(r.rate, k.endsWith('MYR') ? 4 : 3), pc?.abs, pc?.pct); } }
   return it;
 }
 function renderTicker() {
@@ -443,8 +445,191 @@ function renderTicker() {
   track.style.animationDuration = `${Math.max(30, items.length * 5)}s`;
 }
 
+
+// ------------------------------------------------------------ Simple view (default landing)
+const SIMPLE_UNITS = { gold: localStorage.getItem('gsfx-su-gold') || '10g', silver: localStorage.getItem('gsfx-su-silver') || 'kg' };
+const UNIT_TXT = { g: '1 g', '10g': '10 g', kg: '1 kg' };
+let memo = (() => { try { return JSON.parse(localStorage.getItem('gsfx-simple-memo')) || {}; } catch { return {}; } })();
+/** Remember the last two distinct values of a live number so we can show ▲/▼ vs the previous fetch. */
+function remember(key, val, seedPrev = null) {
+  if (!(val > 0)) return null;
+  const m = memo[key] || {};
+  const r = (x) => Math.round(x * 1e4) / 1e4;
+  if (m.cur == null) { m.cur = val; m.prev = seedPrev > 0 ? seedPrev : null; }
+  else if (r(m.cur) !== r(val)) { m.prev = m.cur; m.cur = val; }
+  memo[key] = m;
+  return m.prev;
+}
+function saveMemo() { try { localStorage.setItem('gsfx-simple-memo', JSON.stringify(memo)); } catch { /* ignore */ } }
+
+function arrowOf(delta, eps) {
+  if (delta == null || !Number.isFinite(delta) || Math.abs(delta) < eps) return { cls: 'flat', ar: '▬' };
+  return delta > 0 ? { cls: 'up', ar: '▲' } : { cls: 'down', ar: '▼' };
+}
+
+/** One price cell: ₹ value + arrow + change, and the USD equivalent in brackets. */
+function priceCell(val, prev, usdInrRate, opt = {}) {
+  if (val == null || !Number.isFinite(val)) return `<div class="pc na"><span class="pv">—</span>${opt.na ? `<span class="pn">${opt.na}</span>` : ''}</div>`;
+  const delta = prev != null && Number.isFinite(prev) ? val - prev : null;
+  const a = arrowOf(delta, Math.max(0.005, Math.abs(val) * 1e-6));
+  const signed = opt.signed && val !== 0 ? (val > 0 ? '+' : '−') : '';
+  const v = Math.abs(opt.signed ? val : val);
+  const usd = usdInrRate > 0 ? fmtUSD(v / usdInrRate, v / usdInrRate < 100 ? 2 : 0) : null;
+  const dtxt = delta != null && a.cls !== 'flat' ? `${delta > 0 ? '+' : '−'}${fmtINR(Math.abs(delta), dpFor(v))}` : 'no change';
+  return `<div class="pc ${opt.cls || ''}">
+    ${opt.pct != null ? `<span class="pct">${opt.pct}</span>` : ''}
+    <span class="pv">${signed}${fmtINR(v, dpFor(v))}${usd ? ` <span class="pu">(${signed}${usd})</span>` : ''}</span>
+    <span class="pd ${a.cls}" title="${esc(opt.vsTxt || '')}">${a.ar} ${dtxt}</span>
+  </div>`;
+}
+
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtIbjaDate(d) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${+m[3]} ${MON3[+m[2] - 1]}` : (d || ''); }
+function simpleMetal(metal) {
+  const isGold = metal === 'gold';
+  const unit = SIMPLE_UNITS[metal], f = UNIT_FACTOR[unit];
+  const sym = isGold ? 'xau' : 'xag';
+  const fx = usdInr();
+  const fxRate = fx?.rate;
+  const s = resolveSpot(sym);
+  // International price in INR per gram, with the previous fetch for the arrow.
+  let B = null, Bprev = null;
+  if (s && fxRate) {
+    B = (s.usd / G_PER_OZ) * fxRate;
+    const pv = prevDistinct(`spot_${sym}`, s.usd);
+    Bprev = remember(`B_${sym}`, B, pv ? (pv.v / G_PER_OZ) * fxRate : null);
+  }
+  // India = IBJA 999 (ex-GST); Chennai = MJDTA board (ex-GST). Gold uses 24K so purity matches world 999 spot.
+  const ib = ibjaLatest();
+  const ibCur = ib?.cur?.vals?.[isGold ? 'g999' : 's999'];
+  const ibPrev = ib?.prev?.vals?.[isGold ? 'g999' : 's999'];
+  const ibPerG = (x) => (x > 0 ? (isGold ? x / 10 : x / 1000) : null);
+  const ch = chennaiBoard()?.primary;
+  let chCur = null, chPrev = null, ch22 = null;
+  if (ch) {
+    if (isGold) {
+      ch22 = ch.values.g22;
+      chCur = gold24From22(ch22);
+      const d = ch.diff?.g22; chPrev = d != null ? gold24From22(ch22 - d) : null;
+    } else {
+      chCur = ch.values.silver_g; const d = ch.diff?.silver_g; chPrev = d != null ? chCur - d : null;
+    }
+  }
+  const rows = [
+    { key: 'world', name: 'World', sub: 'International spot price', flag: '🌍', local: null, localPrev: null,
+      when: s ? fmtMytIst(s.t) : '—', src: s ? s.source : 'spot unavailable', vsTxt: 'vs previous update' },
+    { key: 'india', name: 'India', sub: 'IBJA national benchmark (999)', flag: '🇮🇳', local: ibPerG(ibCur), localPrev: ibPerG(ibPrev),
+      when: ib?.cur ? `${fmtIbjaDate(ib.d.date)} ${ib.cur.sess} print (${ib.cur.sess === 'PM' ? '5:00 PM' : '12:05 PM'} IST)` : '—', src: 'IBJA (ibjarates.com)', vsTxt: ib?.prev ? `vs ${ib.prev.label} print` : 'vs previous' },
+    { key: 'chennai', name: 'Chennai', sub: isGold ? `MJDTA board · 24K (22K ₹${ch22 ? fmtNum(ch22, 0) : '—'}/g)` : 'MJDTA board', flag: '🏙️', local: chCur, localPrev: chPrev,
+      when: ch ? fmtMytIst(ch.updatedAt) : '—', src: ch ? ch.name : 'Chennai unavailable', vsTxt: 'vs previous board print' },
+  ];
+  const fmtRow = (r) => {
+    const cur = B ? simpleRow(B, r.local) : null;
+    const prv = (Bprev || B) ? simpleRow(Bprev || B, r.local == null ? null : (r.localPrev ?? r.local)) : null;
+    const P = (k) => (cur?.[k] != null ? cur[k] * f : null);
+    const Q = (k) => (prv?.[k] != null ? prv[k] * f : null);
+    const naLocal = r.local == null && r.key !== 'world' ? 'not posted' : null;
+    const notApp = '<div class="pc na"><span class="pv">—</span><span class="pn">not applicable</span></div>';
+    const intl = priceCell(B ? B * f : null, Bprev ? Bprev * f : null, fxRate, { vsTxt: 'vs previous update' });
+    let duty, gst, prem, fin;
+    if (r.key === 'world') {
+      duty = notApp; gst = notApp; prem = notApp;
+      fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final', vsTxt: r.vsTxt });
+    } else if (!cur) {
+      const why = !B ? 'needs world price' : naLocal || 'unavailable';
+      duty = priceCell(B ? B * 0.15 * f : null, null, fxRate, { na: why, pct: '15%' });
+      gst = prem = fin = priceCell(null, null, fxRate, { na: why });
+    } else {
+      duty = priceCell(P('duty'), Q('duty'), fxRate, { pct: `${Math.round(cur.dutyPct * 100)}%`, vsTxt: 'moves with the world price' });
+      gst = priceCell(P('gst'), Q('gst'), fxRate, { pct: '3%', vsTxt: r.vsTxt });
+      prem = priceCell(P('premium'), Q('premium'), fxRate, { signed: true, cls: cur.premium >= 0 ? 'prem' : 'disc',
+        pct: cur.premium >= 0 ? 'premium' : 'discount', vsTxt: 'board price minus (world + duty)' });
+      fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final', vsTxt: r.vsTxt });
+    }
+    return `<tr class="row-${r.key}">
+      <th scope="row" class="where"><span class="fl" aria-hidden="true">${r.flag}</span><div><b>${r.name}</b><small>${esc(r.sub)}</small><small class="when">${esc(r.when)}</small></div></th>
+      <td data-l="International rate">${intl}</td>
+      <td data-l="Import duty">${duty}</td>
+      <td data-l="GST">${gst}</td>
+      <td data-l="Dealer premium">${prem}</td>
+      <td data-l="${r.key === 'world' ? 'Final (no Indian tax)' : 'Final cost in India'}" class="fcol">${fin}</td>
+    </tr>`;
+  };
+  const seg = `<div class="seg sm" role="radiogroup" aria-label="${isGold ? 'Gold' : 'Silver'} unit">${['g', '10g', 'kg'].map((u) => `<button role="radio" data-metal="${metal}" data-su="${u}" aria-checked="${u === unit}">${UNIT_TXT[u]}</button>`).join('')}</div>`;
+  const spotTxt = s ? `${fmtUSD(s.usd, isGold ? 2 : 3)}/oz × ₹${fmtNum(fxRate, 2)} per $` : 'spot unavailable';
+  return `<section class="sv-card ${metal}">
+    <div class="sv-h">
+      <div><div class="kicker">${isGold ? 'Gold · 24K / 999' : 'Silver · 999'}</div><h2>${isGold ? '🟡 Gold' : '⚪ Silver'} price, ${UNIT_TXT[unit]}</h2><p class="sv-sub">World price ${esc(spotTxt)}</p></div>
+      ${seg}
+    </div>
+    <div class="sv-tbl"><table class="sv">
+      <thead><tr><th>Where</th><th>International rate<small>world price in ₹</small></th><th>Import duty<small>tax to bring metal in</small></th><th>GST<small>sales tax</small></th><th>Dealer premium<small>(+) extra / (−) discount</small></th><th>Final cost in India<small>before making charges</small></th></tr></thead>
+      <tbody>${rows.map(fmtRow).join('')}</tbody>
+    </table></div>
+  </section>`;
+}
+
+function simpleFx() {
+  const pairs = [['GBPINR', '🇬🇧 GBP → 🇮🇳 INR', '₹'], ['USDINR', '🇺🇸 USD → 🇮🇳 INR', '₹'], ['MYRINR', '🇲🇾 MYR → 🇮🇳 INR', '₹'], ['GBPMYR', '🇬🇧 GBP → 🇲🇾 MYR', 'RM ']];
+  const tiles = pairs.map(([k, label, cur]) => {
+    const r = resolveFx(k);
+    if (!r) return `<div class="fx-tile"><div class="fx-l">${label}</div><div class="fx-v">—</div><div class="pd flat">unavailable</div></div>`;
+    let prevClose = r.prevClose;
+    if (!prevClose && k === 'GBPMYR') { const a = SRC('fx_GBPINR')?.data, b = SRC('fx_MYRINR')?.data; if (a?.prevClose && b?.prevClose) prevClose = a.prevClose / b.prevClose; }
+    const dp = k.endsWith('MYR') ? 4 : 2;
+    const mPrev = remember(`fx_${k}`, r.rate);
+    const ref = prevClose || mPrev;
+    const delta = ref ? r.rate - ref : null;
+    const a = arrowOf(delta, Math.pow(10, -dp - 1));
+    const pct = ref ? ` (${delta >= 0 ? '+' : ''}${((delta / ref) * 100).toFixed(2)}%)` : '';
+    return `<div class="fx-tile">
+      <div class="fx-l">${label}</div>
+      <div class="fx-v">${cur}${fmtNum(r.rate, dp)}</div>
+      <div class="pd ${a.cls}">${a.ar} ${delta != null && a.cls !== 'flat' ? `${delta > 0 ? '+' : '−'}${fmtNum(Math.abs(delta), dp)}${pct}` : 'no change'}</div>
+      <div class="fx-s">${prevClose ? 'vs yesterday’s close' : 'vs previous update'} · ${esc(r.source.replace(/ \(.*\)/, ''))} · ${esc(fmtMytIst(r.t))}</div>
+    </div>`;
+  });
+  return `<section class="sv-fx"><div class="sv-h"><div><div class="kicker">Currencies</div><h2>💱 Exchange rates</h2><p class="sv-sub">How much 1 unit of the first currency buys</p></div></div><div class="fx-grid">${tiles.join('')}</div></section>`;
+}
+
+function renderSimple() {
+  const el = $('#simple');
+  if (!el) return;
+  const live = state.live.at && !state.live.err;
+  el.innerHTML = `
+    <div class="sv-hero">
+      <div><h2>What gold & silver cost today</h2><p>From the world price, add India’s taxes, and see what it costs in India and Chennai.</p></div>
+      <span class="pill"><span class="dot ${live ? 'on' : 'wait'}"></span>${live ? `Live · ${esc(fmtMytIst(state.live.at))}` : 'Loading live prices…'}</span>
+    </div>
+    <div class="sv-explain">
+      <div><b>International rate</b> = world price, changed into rupees</div>
+      <div><b>Import duty (15%)</b> = tax India charges to bring metal in</div>
+      <div><b>GST (3%)</b> = sales tax on the metal</div>
+      <div><b>Dealer premium</b> = what Indian dealers add (+) or knock off (−)</div>
+      <div><b>Final cost</b> = what 999 metal costs in India, before making charges</div>
+    </div>
+    ${simpleMetal('gold')}
+    ${simpleMetal('silver')}
+    ${simpleFx()}
+    <p class="sv-note">▲ up · ▼ down · ▬ no change. World price arrows compare with the previous update; India and Chennai compare with the previous board print. Dollar figures in brackets use today’s USD/INR. Import duty: ${esc(DUTY_SOURCE.text)} <a href="${esc(DUTY_SOURCE.url)}" target="_blank" rel="noopener">Source</a>. A cut back to 6% has been reported as under consideration but is not in force. Chennai 24K is worked out from the 22K board (× 24 ÷ 22). Boards and IBJA exclude GST, so GST is added here.</p>`;
+  el.querySelectorAll('[data-su]').forEach((b) => b.addEventListener('click', () => {
+    SIMPLE_UNITS[b.dataset.metal] = b.dataset.su; localStorage.setItem(`gsfx-su-${b.dataset.metal}`, b.dataset.su); renderSimple();
+  }));
+  saveMemo();
+}
+
+// View switch: Simple is the default landing view; "Detailed" is the original dashboard.
+function setView(v, push = true) {
+  const view = v === 'detailed' ? 'detailed' : 'simple';
+  document.body.dataset.view = view;
+  try { sessionStorage.setItem('gsfx-view', view); } catch { /* ignore */ }
+  document.querySelectorAll('#viewSeg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === view)));
+  if (push) history.replaceState(null, '', view === 'detailed' ? '#detailed' : location.pathname + location.search);
+  window.scrollTo({ top: 0 });
+}
+
 function renderAll() {
-  const sections = [renderStatus, renderChennai, renderIbja, renderMcx, renderSpot, renderFx, renderBreakdown, renderSources, renderTicker];
+  const sections = [renderSimple, renderStatus, renderChennai, renderIbja, renderMcx, renderSpot, renderFx, renderBreakdown, renderSources, renderTicker];
   for (const fn of sections) {
     try { fn(); } catch (e) { console.warn('render failed', fn.name, e); }
   }
@@ -524,6 +709,8 @@ function clock() {
 }
 
 // ------------------------------------------------------------ boot
+document.querySelectorAll('#viewSeg button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+setView(location.hash === '#detailed' ? 'detailed' : (sessionStorage.getItem('gsfx-view') || 'simple'), false);
 document.querySelectorAll('#unitSeg button').forEach((b) => b.addEventListener('click', () => {
   state.unit = b.dataset.unit; localStorage.setItem('gsfx-unit', state.unit); renderAll();
 }));

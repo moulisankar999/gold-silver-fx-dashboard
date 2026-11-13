@@ -93,3 +93,17 @@ test('MCX expiry: 5th or previous weekday', () => {
   assert.equal(C.mcxExpiry(2026, 12), '2026-12-04'); // 5 Dec 2026 is a Saturday
   assert.equal(C.mcxExpiry(2027, 2), '2027-02-05');
 });
+
+test('simple view row: columns add up to the final price', () => {
+  const r = C.simpleRow(11720, 13769);
+  close(r.duty, 11720 * 0.15);
+  close(r.gst, 13769 * 0.03);
+  close(r.premium, 13769 - 11720 * 1.15);
+  close(r.final, 13769 * 1.03);
+  close(r.intl + r.duty + r.premium + r.gst, r.final);
+  const w = C.simpleRow(11720);
+  assert.equal(w.duty, null); assert.equal(w.final, 11720);
+  assert.equal(C.simpleRow(0, 100), null);
+  assert.equal(C.simpleRow(100, 0), null);
+  close(C.DUTY.bcd + C.DUTY.aidc, 0.15);
+});

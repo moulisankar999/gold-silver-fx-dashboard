@@ -7,8 +7,15 @@ on:
     - cron: '5,15,25 10 * * *'       # MJDTA afternoon print ~3:30 PM IST (10:00 UTC)
     - cron: '38,44,52 6 * * 1-5'     # IBJA AM print ~12:05 PM IST (06:35 UTC)
     - cron: '33,38,45 11 * * 1-5'    # IBJA PM print ~5:00 PM IST (11:30 UTC)
+    - cron: '35 1 * * 1-6'           # 7:05 AM IST: start the market-hours chain
+    - cron: '50 2 * * 1-6'           # backup chain starters
+    - cron: '10,40 3 * * 1-6'
     - cron: '0 3 1 * *'              # monthly keep-alive (re-enables this schedule)
   workflow_dispatch:
+    inputs:
+      loop_minutes:
+        description: 'Minutes to keep scraping in this run'
+        default: '50'
 
 concurrency:
   group: scrape
@@ -21,7 +28,7 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,23 +50,27 @@ jobs:
             git show FETCH_HEAD:data/history.json > prev/history.json || true
           fi
 
-      - name: Scrape
-        id: scrape
-        run: python scraper/scrape.py --prev prev --out out/data
+      - name: Scrape every 10 min for ~45 min, publish on change
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || '50' }}
+          INTERVAL_SEC: '600'
+        run: bash scraper/loop.sh
 
-      - name: Publish to data branch (single commit, only when values changed)
-        if: steps.scrape.outputs.changed == 'true'
+      # GitHub silently drops most "*/10" cron runs on small repos (only 4 of ~90 fired on day one),
+      # so during market hours (7:00 AM to 11:30 PM IST, Mon-Sat) each run queues the next one.
+      # The concurrency group keeps at most one running + one queued, so chains never multiply.
+      - name: Queue the next run (market hours)
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd out
-          git init -q -b data
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          printf 'Scraped rates for the dashboard. Rewritten as one commit on each change.\n' > README.md
-          git add -A
-          git commit -q -m "data $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
+          hm=$(TZ=Asia/Kolkata date +%H%M); dow=$(TZ=Asia/Kolkata date +%u)
+          if [ "$dow" -le 6 ] && [ $((10#$hm)) -ge 700 ] && [ $((10#$hm)) -le 2330 ]; then
+            gh workflow run scrape.yml --repo "$GITHUB_REPOSITORY" --ref main && echo "queued next run"
+          else
+            echo "outside market hours ($hm IST, day $dow): cron only"
+          fi
 
       - name: Keep schedule alive
         if: github.event.schedule == '0 3 1 * *'

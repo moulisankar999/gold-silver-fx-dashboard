@@ -2,7 +2,14 @@
 export const G_PER_OZ = 31.1035;      // grams per troy ounce
 export const OZ_PER_KG = 32.1507;     // troy ounces per kilogram
 export const UNIT_FACTOR = { g: 1, '10g': 10, kg: 1000 };
-export const DUTY = { bcd: 0.10, aidc: 0.05, gst: 0.03 }; // silver HS 7106, effective 13 May 2026
+// Gold (HS 7108) and silver (HS 7106): BCD 10% + AIDC 5% = 15% customs duty, then IGST 3% on the duty-paid value.
+// In force since 13 May 2026 (Notification Nos. 15/2026-Customs and 16/2026-Customs). A cut back to 6% has been
+// reported as "under consideration" since Aug 2026 but is NOT notified, so 15% stays until a new notification.
+export const DUTY = { bcd: 0.10, aidc: 0.05, gst: 0.03 };
+export const DUTY_SOURCE = {
+  text: 'BCD 10% + AIDC 5% = 15% on gold and silver since 13 May 2026 (Customs Notifications 15/2026 & 16/2026); GST 3% on top.',
+  url: 'https://www.business-standard.com/economy/news/india-hikes-import-duty-on-gold-and-silver-to-15-platinum-to-15-4-126051300762_1.html',
+};
 
 export const IST_OFFSET_MIN = 330;
 export const MYT_OFFSET_MIN = 480;
@@ -49,6 +56,24 @@ export function silverLanded(baseInr, d = DUTY) {
   const dutyPaid = baseInr + duty;
   const gst = dutyPaid * d.gst;
   return { base: baseInr, bcd, aidc, duty, dutyPaid, gst, landed: dutyPaid + gst };
+}
+
+/**
+ * One row of the Simple view, all per gram in INR.
+ * intl = international price in INR. local = Indian board rate (IBJA / Chennai, which exclude GST).
+ * World row (no local): final = intl, no taxes.
+ * India / Chennai: duty = 15% of intl; premium = local - (intl + duty) (dealer premium, or discount if negative);
+ * GST = 3% of local; final = local + GST. So intl + duty + premium + GST = final exactly.
+ */
+export function simpleRow(intl, local = null, d = DUTY) {
+  if (!(intl > 0)) return null;
+  if (local == null) return { intl, duty: null, gst: null, premium: null, final: intl, dutyPct: null };
+  if (!(local > 0)) return null;
+  const dutyPct = d.bcd + d.aidc;
+  const duty = intl * dutyPct;
+  const premium = local - (intl + duty);
+  const gst = local * d.gst;
+  return { intl, duty, gst, premium, final: local + gst, dutyPct, local };
 }
 
 /** Markup of price over a reference, as amount and %. */

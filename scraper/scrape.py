@@ -42,7 +42,7 @@ URLS = {
 FX_PAIRS = {  # display key -> yahoo symbol
     "USDINR": "USDINR=X", "MYRINR": "MYRINR=X", "GBPINR": "GBPINR=X",
     "SGDINR": "SGDINR=X", "EURINR": "EURINR=X", "AEDINR": "AEDINR=X",
-    "SGDMYR": "SGDMYR=X",
+    "SGDMYR": "SGDMYR=X", "GBPMYR": "GBPMYR=X",
 }
 
 
