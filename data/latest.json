@@ -1,0 +1,325 @@
+{
+ "schema": 1,
+ "generatedAt": "2026-11-14T19:16:27Z",
+ "sources": {
+  "mjdta": {
+   "ok": true,
+   "source": "MJDTA (thejewellersassociation.org)",
+   "url": "https://www.thejewellersassociation.org/",
+   "fetchedAt": "2026-11-14T19:16:09Z",
+   "data": {
+    "values": {
+     "g22": 12615.0,
+     "g18": 10325.0,
+     "g14": 8285.0,
+     "silver_g": 195.0
+    },
+    "diff": {
+     "g22": -80.0,
+     "g18": -65.0,
+     "g14": -40.0,
+     "silver_g": 0.0
+    },
+    "updateText": "14/11/2026 Morning 09:32 AM",
+    "updatedAt": "2026-11-14T09:32:00+05:30",
+    "session": "Morning"
+   }
+  },
+  "cwja": {
+   "ok": true,
+   "source": "CWJA (cwja.org.in)",
+   "url": "https://cwja.org.in/",
+   "fetchedAt": "2026-11-14T19:16:11Z",
+   "data": {
+    "values": {
+     "g22": 12615.0,
+     "g18": 10325.0,
+     "g14": null,
+     "silver_g": 195.0
+    },
+    "updatedAt": "2026-11-14T09:32:46+05:30"
+   }
+  },
+  "ibja": {
+   "ok": false,
+   "source": "IBJA (ibjarates.com)",
+   "url": "https://ibjarates.com/",
+   "lastAttempt": "2026-11-14T19:16:11Z",
+   "error": "ValueError: IBJA board empty",
+   "data": {
+    "date": "2026-11-12",
+    "am": {
+     "g999": 135884.0,
+     "g995": 135340.0,
+     "g916": 124470.0,
+     "g750": 101913.0,
+     "g585": 79492.0,
+     "s999": 177500.0,
+     "p999": 58000.0
+    },
+    "pm": {
+     "g999": 135809.0,
+     "g995": 135265.0,
+     "g916": 124401.0,
+     "g750": 101857.0,
+     "g585": 79448.0,
+     "s999": 178000.0,
+     "p999": 55940.0
+    },
+    "history": {
+     "am": [
+      {
+       "date": "2026-11-12",
+       "g999": 138294.0,
+       "g995": 137740.0,
+       "g916": 126677.0,
+       "g750": 103721.0,
+       "g585": 80902.0,
+       "s999": 181999.0,
+       "p999": 55050.0
+      },
+      {
+       "date": "2026-11-11",
+       "g999": 140805.0,
+       "g995": 140241.0,
+       "g916": 128977.0,
+       "g750": 105604.0,
+       "g585": 82371.0,
+       "s999": 186495.0,
+       "p999": 56300.0
+      },
+      {
+       "date": "2026-11-10",
+       "g999": 142420.0,
+       "g995": 141850.0,
+       "g916": 130457.0,
+       "g750": 106815.0,
+       "g585": 83316.0,
+       "s999": 186000.0,
+       "p999": 55850.0
+      },
+      {
+       "date": "2026-11-06",
+       "g999": 141023.0,
+       "g995": 140458.0,
+       "g916": 129177.0,
+       "g750": 105767.0,
+       "g585": 82498.0,
+       "s999": 181863.0,
+       "p999": 56650.0
+      }
+     ],
+     "pm": [
+      {
+       "date": "2026-11-12",
+       "g999": 137692.0,
+       "g995": 137141.0,
+       "g916": 126126.0,
+       "g750": 103269.0,
+       "g585": 80550.0,
+       "s999": 181040.0,
+       "p999": 54850.0
+      },
+      {
+       "date": "2026-11-11",
+       "g999": 140603.0,
+       "g995": 140040.0,
+       "g916": 128792.0,
+       "g750": 105452.0,
+       "g585": 82253.0,
+       "s999": 185900.0,
+       "p999": 56150.0
+      },
+      {
+       "date": "2026-11-06",
+       "g999": 141452.0,
+       "g995": 140886.0,
+       "g916": 129570.0,
+       "g750": 106089.0,
+       "g585": 82749.0,
+       "s999": 182868.0,
+       "p999": 55707.0
+      },
+      {
+       "date": "2026-11-05",
+       "g999": 144129.0,
+       "g995": 143552.0,
+       "g916": 132022.0,
+       "g750": 108097.0,
+       "g585": 84315.0,
+       "s999": 187300.0,
+       "p999": 56863.0
+      }
+     ]
+    },
+    "units": {
+     "gold": "10g",
+     "silver": "kg",
+     "platinum": "10g"
+    }
+   },
+   "fetchedAt": "2026-11-13T19:27:44Z"
+  },
+  "mcx_gold": {
+   "ok": true,
+   "source": "mcxlive.org",
+   "url": "https://mcxlive.org/gold/",
+   "fetchedAt": "2026-11-14T19:16:21Z",
+   "data": {
+    "contract": "04 Dec 2026",
+    "asOf": "2026-11-15T00:45:00+05:30",
+    "ltp": 136750.0,
+    "change": 525.0,
+    "changePct": 0.39,
+    "high": 137587.0,
+    "low": 136055.0,
+    "open": 136225.0,
+    "expiry": "2026-12-04",
+    "unit": "10g"
+   }
+  },
+  "mcx_silver": {
+   "ok": true,
+   "source": "mcxlive.org",
+   "url": "https://mcxlive.org/silver/",
+   "fetchedAt": "2026-11-14T19:16:22Z",
+   "data": {
+    "contract": "04 Dec 2026",
+    "asOf": "2026-11-15T00:46:00+05:30",
+    "ltp": 176543.0,
+    "change": 234.0,
+    "changePct": 0.13,
+    "high": 180199.0,
+    "low": 175400.0,
+    "open": 176309.0,
+    "expiry": "2026-12-04",
+    "unit": "kg"
+   }
+  },
+  "spot_xau": {
+   "ok": true,
+   "source": "gold-api.com",
+   "url": "https://api.gold-api.com/price/XAU",
+   "fetchedAt": "2026-11-14T19:16:24Z",
+   "data": {
+    "usdPerOz": 3887.600098,
+    "updatedAt": "2026-11-14T19:15:55Z"
+   }
+  },
+  "spot_xag": {
+   "ok": true,
+   "source": "gold-api.com",
+   "url": "https://api.gold-api.com/price/XAG",
+   "fetchedAt": "2026-11-14T19:16:25Z",
+   "data": {
+    "usdPerOz": 48.650002,
+    "updatedAt": "2026-11-14T19:16:24Z"
+   }
+  },
+  "fx_USDINR": {
+   "ok": true,
+   "source": "Yahoo Finance",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/USDINR=X",
+   "fetchedAt": "2026-11-14T19:16:25Z",
+   "data": {
+    "rate": 94.24,
+    "updatedAt": "2026-11-14T03:30:17Z",
+    "prevClose": 94.04
+   }
+  },
+  "fx_MYRINR": {
+   "ok": true,
+   "source": "Yahoo Finance",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/MYRINR=X",
+   "fetchedAt": "2026-11-14T19:16:25Z",
+   "data": {
+    "rate": 23.056,
+    "updatedAt": "2026-11-14T03:56:46Z",
+    "prevClose": 23.055
+   }
+  },
+  "fx_GBPINR": {
+   "ok": true,
+   "source": "Yahoo Finance",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/GBPINR=X",
+   "fetchedAt": "2026-11-14T19:16:25Z",
+   "data": {
+    "rate": 124.4628,
+    "updatedAt": "2026-11-14T03:30:17Z",
+    "prevClose": 124.4398
+   }
+  },
+  "fx_SGDINR": {
+   "ok": true,
+   "source": "Yahoo Finance",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/SGDINR=X",
+   "fetchedAt": "2026-11-14T19:16:26Z",
+   "data": {
+    "rate": 73.18,
+    "updatedAt": "2026-11-13T22:26:46Z",
+    "prevClose": 73.108
+   }
+  },
+  "fx_EURINR": {
+   "ok": true,
+   "source": "Yahoo Finance",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/EURINR=X",
+   "fetchedAt": "2026-11-14T19:16:26Z",
+   "data": {
+    "rate": 103.8619,
+    "updatedAt": "2026-11-14T03:30:17Z",
+    "prevClose": 103.9771
+   }
+  },
+  "fx_AEDINR": {
+   "ok": true,
+   "source": "Yahoo Finance",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/AEDINR=X",
+   "fetchedAt": "2026-11-14T19:16:26Z",
+   "data": {
+    "rate": 25.611,
+    "updatedAt": "2026-11-13T23:01:46Z",
+    "prevClose": 25.554
+   }
+  },
+  "fx_SGDMYR": {
+   "ok": true,
+   "source": "Yahoo Finance",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/SGDMYR=X",
+   "fetchedAt": "2026-11-14T19:16:26Z",
+   "data": {
+    "rate": 3.1733,
+    "updatedAt": "2026-11-13T22:26:46Z",
+    "prevClose": 3.1711
+   }
+  },
+  "fx_GBPMYR": {
+   "ok": true,
+   "source": "Yahoo Finance",
+   "url": "https://query1.finance.yahoo.com/v8/finance/chart/GBPMYR=X",
+   "fetchedAt": "2026-11-14T19:16:26Z",
+   "data": {
+    "rate": 5.399,
+    "updatedAt": "2026-11-13T22:26:46Z",
+    "prevClose": 5.3964
+   }
+  },
+  "erapi": {
+   "ok": true,
+   "source": "open.er-api.com",
+   "url": "https://open.er-api.com/v6/latest/USD",
+   "fetchedAt": "2026-11-14T19:16:26Z",
+   "data": {
+    "usdRates": {
+     "INR": 94.289707,
+     "MYR": 4.086467,
+     "GBP": 0.756419,
+     "SGD": 1.287798,
+     "EUR": 0.905954,
+     "AED": 3.6725
+    },
+    "updatedAt": "2026-11-14T00:02:31Z"
+   }
+  }
+ }
+}
