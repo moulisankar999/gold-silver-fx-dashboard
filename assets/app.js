@@ -316,7 +316,7 @@ function renderMcx() {
     if (expired) b.push(badge('na', 'Expired', 'Source still shows an expired contract'));
     const ohl = `O ${inr(toUnit(perG(q.open), u))} · H ${inr(toUnit(perG(q.high), u))} · L ${inr(toUnit(perG(q.low), u))}`;
     return card({ label: `${label} · ${q.contract}`, value: inr(toUnit(perG(q.ltp), u)), unit: unitLabel(), cls: metal === 'gold' ? 'hero' : 'silver',
-      change: chg(toUnit(perG(q.change), u), q.changePct, inr, 'vs prev close'), alt: `${ohl}<br>Board: ${inr(q.ltp)} per ${q.unit} · expiry ${q.expiry}`,
+      change: chg(q.change != null ? toUnit(q.change / div, u) : null, q.changePct, inr, 'vs prev close'), alt: `${ohl}<br>Board: ${inr(q.ltp)} per ${q.unit} · expiry ${q.expiry}`,
       badges: b, sparkHtml: spark(`mcx_${metal}`, UNIT_FACTOR[u] / div),
       foot: srcFoot('mcxlive.org', e.url, t, `Last trade ${esc(fmtMytIst(q.lastTrade))}; page said "Market ${esc(q.marketStatus || '?')}". Scraped every ~10 min, so up to ~15–20 min behind MCX.`) });
   };
