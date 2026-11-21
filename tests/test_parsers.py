@@ -34,6 +34,17 @@ def test_ibja():
     assert d["history"]["pm"][0]["date"] == "2026-11-11"
 
 
+def test_ibja_date_from_history():
+    # Board showing a rate that is already in the history table (11 Nov AM) must take that row's date,
+    # not the hidden RateTime day (12).
+    html = read("ibja.html").replace('id="lblGold999_AM">138294<', 'id="lblGold999_AM">140805<')
+    d = scrape.parse_ibja(html, today_ist=datetime(2026, 11, 14, 10, 0, tzinfo=scrape.IST))
+    assert d["date"] == "2026-11-11", d["date"]
+    # Board newer than the history table -> today's print
+    d = scrape.parse_ibja(read("ibja.html"), today_ist=datetime(2026, 11, 12, 13, 0, tzinfo=scrape.IST))
+    assert d["date"] == "2026-11-12"
+
+
 def test_mcx():
     g = scrape.parse_mcxlive(read("mcx_gold.html"))
     assert g["contract"] == "04 Dec 2026" and g["expiry"] == "2026-12-04"

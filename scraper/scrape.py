@@ -183,6 +183,17 @@ def parse_ibja(html: str, today_ist: datetime | None = None) -> dict:
             hist[sess].append(row)
     has_am = any(am.values())
     has_pm = any(pm.values())
+    # The hidden RateTime field is often empty or stale (it showed "12" for the 20 Nov board), so prefer
+    # the date of the history row whose 999 rate matches the board; if none matches, the board is newer
+    # than the history table, i.e. today's print.
+    for sess, cur in (("am", am), ("pm", pm)):
+        if cur.get("g999"):
+            match = [r["date"] for r in hist[sess] if r.get("g999") == cur["g999"]]
+            if match:
+                board_date = match[0]
+            elif hist[sess] and hist[sess][0]["date"] < today_ist.date().isoformat():
+                board_date = today_ist.date().isoformat()
+            break
     return {"date": board_date, "am": am if has_am else None, "pm": pm if has_pm else None,
             "history": hist, "units": {"gold": "10g", "silver": "kg", "platinum": "10g"}}
 
@@ -282,7 +293,16 @@ def fetch_cwja():
 def fetch_ibja():
     d = parse_ibja(get(URLS["ibja"]).text)
     if not d["am"] and not d["pm"]:
-        raise ValueError("IBJA board empty")
+        # Weekends/holidays: the board is blank but the history table still has the latest print.
+        h = d["history"]
+        if not h["am"]:
+            raise ValueError("IBJA board empty")
+        day = h["am"][0]["date"]
+        d["am"] = {k: v for k, v in h["am"][0].items() if k != "date"}
+        d["pm"] = ({k: v for k, v in h["pm"][0].items() if k != "date"}
+                   if h["pm"] and h["pm"][0]["date"] == day else None)
+        d["date"] = day
+        d["fromHistory"] = True
     return d
 
 
