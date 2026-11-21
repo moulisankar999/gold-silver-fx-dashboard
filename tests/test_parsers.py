@@ -43,6 +43,18 @@ def test_mcx():
     assert s["ltp"] == 180828.0 and s["open"] == 184525.0
 
 
+def test_mcx_fd_layout():
+    # mcxlive.org layout from 20 Nov 2026: quote in window.FD_FEED JSON (times in UTC)
+    g = scrape.parse_mcxlive(read("mcx_gold_fd.html"))
+    assert g["contract"] == "04 Dec 2026" and g["expiry"] == "2026-12-04"
+    assert g["ltp"] == 121949.0 and g["prevClose"] == 127548.0
+    assert g["change"] == -5599.0 and g["changePct"] == -4.39
+    assert g["lastTrade"] == "2026-11-20T23:54:00+05:30" and g["marketStatus"] == "Closed"
+    assert g["high"] == 123975.0 and g["low"] == 121424.0 and g["open"] == 123629.0
+    s = scrape.parse_mcxlive(read("mcx_silver_fd.html"))
+    assert s["ltp"] == 148900.0 and s["prevClose"] == 157600.0 and s["change"] == -8700.0
+
+
 def test_history_dedupe():
     latest = {"generatedAt": "2026-11-12T09:00:00Z", "sources": {
         "spot_xau": {"ok": True, "data": {"usdPerOz": 4000.0, "updatedAt": "2026-11-12T09:00:00Z"}}}}

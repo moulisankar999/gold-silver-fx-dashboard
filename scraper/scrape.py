@@ -193,6 +193,50 @@ def _mcx_dt(day: str, mon: str, year: int, hh: str, mm: str) -> str:
 
 
 def parse_mcxlive(html: str) -> dict:
+    """mcxlive.org. Since ~20 Nov 2026 the quote lives in window.FD_FEED / window.FD_DATA JSON;
+    fall back to the older text layout if those are absent."""
+    if "window.FD_FEED=" in html:
+        return parse_mcxlive_fd(html)
+    return parse_mcxlive_text(html)
+
+
+def parse_mcxlive_fd(html: str) -> dict:
+    """2026 layout: FD_FEED (quote; t_datetime/c_datetime are UTC) + FD_DATA.hist (daily closes,
+    [UTC midnight of the trade date, close]). FD_FEED.close is not always the previous session
+    (silver showed a stale value), so change is computed against the previous daily close."""
+    def blob(name):
+        m = re.search(r"window\.%s=(\{.*?\});\s*(?:window\.|</script>)" % name, html, re.S)
+        if not m:
+            raise ValueError(f"mcxlive {name} not found")
+        return json.loads(m.group(1))
+    f = blob("FD_FEED")
+    try:
+        hist = blob("FD_DATA").get("hist") or []
+    except ValueError:
+        hist = []
+    last = num(f.get("last"))
+    if not last:
+        raise ValueError("mcxlive FD_FEED has no last price")
+    ttrade = datetime.strptime(f["t_datetime"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC).astimezone(IST)
+    try:
+        asof = datetime.strptime(f["c_datetime"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC).astimezone(IST)
+    except Exception:
+        asof = ttrade
+    trade_day = ttrade.date().isoformat()
+    prev = [p[1] for p in hist if p and p[1] and datetime.fromtimestamp(p[0], UTC).date().isoformat() < trade_day]
+    prev_close = num(prev[-1]) if prev else num(f.get("close"))
+    exp = datetime.strptime(f["expiry"], "%Y-%m-%d").date()
+    status = str(f.get("status") or "")
+    change = round(last - prev_close, 2) if prev_close else num(f.get("c_value"))
+    pct = round(change / prev_close * 100, 2) if prev_close else num(f.get("c_percent"))
+    return {"contract": exp.strftime("%d %b %Y"), "expiry": exp.isoformat(),
+            "asOf": asof.isoformat(), "lastTrade": ttrade.isoformat(),
+            "marketStatus": "Open" if status.lower().startswith("open") else "Closed",
+            "ltp": last, "change": change, "changePct": pct, "prevClose": prev_close,
+            "high": num(f.get("high")), "low": num(f.get("low")), "open": num(f.get("open"))}
+
+
+def parse_mcxlive_text(html: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
     for s in soup(["script", "style"]):
         s.decompose()
