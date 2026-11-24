@@ -107,3 +107,23 @@ test('simple view row: columns add up to the final price', () => {
   assert.equal(C.simpleRow(100, 0), null);
   close(C.DUTY.bcd + C.DUTY.aidc, 0.15);
 });
+
+test('boardLabel always carries the date and says Today vs Last', async () => {
+  const { boardLabel } = await import('../assets/calc.js');
+  const now = new Date('2026-11-24T11:25:00Z'); // 4:55 PM IST Tue
+  const a = boardLabel('2026-11-24T09:37:00+05:30', now);
+  assert.equal(a.today, true);
+  assert.equal(a.text, "Today's MJDTA board · 24 Nov, 9:37 AM IST (12:07 PM MYT)");
+  assert.match(a.next, /tomorrow/);
+  const b = boardLabel('2026-11-21T09:41:00+05:30', new Date('2026-11-23T03:00:00Z'));
+  assert.equal(b.today, false);
+  assert.match(b.text, /^Last MJDTA board · 21 Nov, 9:41 AM IST/);
+  assert.match(b.next, /due ~9:30 AM IST/);
+});
+
+test('unchangedSince finds the start of the latest unchanged run', async () => {
+  const { unchangedSince } = await import('../assets/calc.js');
+  const s = [[100, 180], [200, 175], [300, 175]];
+  assert.equal(unchangedSince(s, 175), 200000);
+  assert.equal(unchangedSince(s, 170), null);
+});

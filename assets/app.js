@@ -1,7 +1,7 @@
 import {
   UNIT_FACTOR, DUTY, OZ_PER_KG, toUnit, spotToInr, gold24From22, ibjaGoldPerG, ibjaSilverPerG,
   silverLanded, markup, pctChange, fmtMytIst, ageMinutes, fmtAge, mcxSession, ibjaWindow,
-  ibjaExpectedDate, mjdtaStale, fmtINR, fmtNum, fmtUSD, dpFor, zoneParts, IST_OFFSET_MIN, MYT_OFFSET_MIN,
+  ibjaExpectedDate, mjdtaStale, boardLabel, unchangedSince, fmtINR, fmtNum, fmtUSD, dpFor, zoneParts, IST_OFFSET_MIN, MYT_OFFSET_MIN,
   simpleRow, DUTY_SOURCE, G_PER_OZ,
 } from './calc.js';
 
@@ -515,13 +515,27 @@ function simpleMetal(metal) {
       chCur = ch.values.silver_g; const d = ch.diff?.silver_g; chPrev = d != null ? chCur - d : null;
     }
   }
+  // Chennai label: always the print DATE, "Today's" vs "Last", whether the value moved, and when the next board is due.
+  let chWhen = '—', chWhen2 = '';
+  if (ch) {
+    const L = boardLabel(ch.updatedAt, new Date(), ch.name === 'MJDTA' ? 'MJDTA board' : 'CWJA board');
+    const key = isGold ? 'g22' : 'silver_g', val = ch.values[key], dlt = ch.diff?.[key];
+    const since = unchangedSince(state.history?.series?.[`mjdta_${key}`], val);
+    const sinceTxt = since ? fmtIbjaDate(new Date(since + IST_OFFSET_MIN * 60000).toISOString().slice(0, 10)) : null;
+    const lbl = isGold ? '22K' : 'Silver';
+    let moved;
+    if (dlt) moved = `${lbl} ${dlt > 0 ? '▲' : '▼'} ₹${fmtNum(Math.abs(dlt), 0)}/g vs previous board`;
+    else moved = `${lbl} unchanged at ₹${fmtNum(val, 0)}/g${sinceTxt && sinceTxt !== fmtIbjaDate(ch.updatedAt.slice(0, 10)) ? ` since ${sinceTxt}` : ''}`;
+    chWhen = L.text;
+    chWhen2 = `${moved} · ${L.next}`;
+  }
   const rows = [
     { key: 'world', name: 'World', sub: 'International spot price', flag: '🌍', local: null, localPrev: null,
       when: s ? fmtMytIst(s.t) : '—', src: s ? s.source : 'spot unavailable', vsTxt: 'vs previous update' },
     { key: 'india', name: 'India', sub: 'IBJA national benchmark (999)', flag: '🇮🇳', local: ibPerG(ibCur), localPrev: ibPerG(ibPrev),
       when: ib?.cur ? `${fmtIbjaDate(ib.d.date)} ${ib.cur.sess} print (${ib.cur.sess === 'PM' ? '5:00 PM' : '12:05 PM'} IST)` : '—', src: 'IBJA (ibjarates.com)', vsTxt: ib?.prev ? `vs ${ib.prev.label} print` : 'vs previous' },
     { key: 'chennai', name: 'Chennai', sub: isGold ? `MJDTA board · 24K (22K ₹${ch22 ? fmtNum(ch22, 0) : '—'}/g)` : 'MJDTA board', flag: '🏙️', local: chCur, localPrev: chPrev,
-      when: ch ? fmtMytIst(ch.updatedAt) : '—', src: ch ? ch.name : 'Chennai unavailable', vsTxt: 'vs previous board print' },
+      when: chWhen, when2: chWhen2, src: ch ? ch.name : 'Chennai unavailable', vsTxt: 'vs previous board print' },
   ];
   const fmtRow = (r) => {
     const cur = B ? simpleRow(B, r.local) : null;
@@ -547,7 +561,7 @@ function simpleMetal(metal) {
       fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final', vsTxt: r.vsTxt });
     }
     return `<tr class="row-${r.key}">
-      <th scope="row" class="where"><span class="fl" aria-hidden="true">${r.flag}</span><div><b>${r.name}</b><small>${esc(r.sub)}</small><small class="when">${esc(r.when)}</small></div></th>
+      <th scope="row" class="where"><span class="fl" aria-hidden="true">${r.flag}</span><div><b>${r.name}</b><small>${esc(r.sub)}</small><small class="when">${esc(r.when)}</small>${r.when2 ? `<small class="when2">${esc(r.when2)}</small>` : ''}</div></th>
       <td data-l="International rate">${intl}</td>
       <td data-l="Import duty">${duty}</td>
       <td data-l="GST">${gst}</td>

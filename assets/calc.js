@@ -217,3 +217,31 @@ export function fmtUSD(v, dp = 2) {
 }
 /** Sensible decimals for a rupee figure in the chosen unit. */
 export function dpFor(v) { return Math.abs(v) < 1000 ? 2 : 0; }
+
+/** Label for a board print: always carries the DATE, says whether it is today's board (IST day), and when
+ * the next one is due. Used for Chennai MJDTA so an unchanged board does not look stuck. */
+export function boardLabel(updatedIso, now = new Date(), name = 'MJDTA board') {
+  if (!updatedIso) return { today: false, text: `${name}: not available`, next: '' };
+  const t = new Date(updatedIso);
+  const u = zoneParts(t, IST_OFFSET_MIN), m = zoneParts(t, MYT_OFFSET_MIN), p = zoneParts(now, IST_OFFSET_MIN);
+  const today = u.y === p.y && u.mo === p.mo && u.d === p.d;
+  const hm = (z) => `${z.h % 12 || 12}:${String(z.mi).padStart(2, '0')} ${z.h < 12 ? 'AM' : 'PM'}`;
+  const date = `${u.d} ${MON[u.mo - 1]}`;
+  let next;
+  if (p.dow === 0) next = 'no board on Sunday; next ~9:30 AM IST Monday';
+  else if (!today && p.minutes < 9 * 60 + 30) next = "today's board due ~9:30 AM IST";
+  else if (!today) next = "today's board not posted yet";
+  else if (p.minutes < 15 * 60 + 30) next = 'next update when MJDTA revises (~3:30 PM IST, if at all)';
+  else next = 'next update when MJDTA revises, usually ~9:30 AM IST tomorrow';
+  return { today, next,
+    text: `${today ? "Today's" : 'Last'} ${name} · ${date}, ${hm(u)} IST (${hm(m)} MYT)` };
+}
+
+/** First time the series has held its current value (start of the latest unchanged run), or null. */
+export function unchangedSince(series, value) {
+  if (!Array.isArray(series) || !series.length || value == null) return null;
+  let i = series.length - 1;
+  if (series[i][1] !== value) return null;
+  while (i > 0 && series[i - 1][1] === value) i--;
+  return series[i][0] * 1000;
+}
