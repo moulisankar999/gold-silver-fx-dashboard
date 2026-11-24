@@ -187,3 +187,23 @@ table.sv{width:100%;border-collapse:separate;border-spacing:0;font-variant-numer
   .pd{font-size:11.5px;flex-basis:100%;text-align:right}
   .sv td::before{white-space:nowrap}
 }
+
+/* Total price (incl. all taxes) is the headline for India and Chennai */
+.sv thead th.fcol-h{font-size:13.5px;font-weight:900;color:var(--gold)}
+.sv-card.silver thead th.fcol-h{color:var(--text)}
+.sv td.fcol{border-left:3px solid color-mix(in srgb,var(--gold) 70%,transparent)}
+.sv-card.silver td.fcol{border-left-color:color-mix(in srgb,var(--silver) 70%,transparent)}
+.pc.total .pv{font-size:25px;font-weight:950;letter-spacing:-.025em}
+.pc.total .pn{font-weight:700}
+.sv tr.row-india td:not(.fcol) .pc .pv,.sv tr.row-chennai td:not(.fcol) .pc .pv{font-size:15px;font-weight:750}
+@media (max-width:760px){
+  .sv tr.row-india,.sv tr.row-chennai{display:flex!important;flex-direction:column}
+  .sv tr.row-india td.fcol,.sv tr.row-chennai td.fcol{order:-1;margin:8px -12px 4px;padding:12px;border-left:0;border-radius:12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);flex-direction:column;align-items:stretch;gap:4px}
+  .sv tr.row-india th.where,.sv tr.row-chennai th.where{order:-2}
+  .sv tr.row-india td.fcol::before,.sv tr.row-chennai td.fcol::before{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+  .sv-card.silver tr td.fcol::before{color:var(--text)}
+  .sv tr.row-india td.fcol .pc,.sv tr.row-chennai td.fcol .pc{align-items:flex-start;justify-content:flex-start;text-align:left}
+  .pc.total .pv{font-size:30px}
+  .sv tr.row-india td:not(.fcol),.sv tr.row-chennai td:not(.fcol){font-size:12.5px}
+  .sv tr.row-india td:not(.fcol)::before,.sv tr.row-chennai td:not(.fcol)::before{font-size:12px}
+}

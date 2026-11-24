@@ -480,6 +480,7 @@ function priceCell(val, prev, usdInrRate, opt = {}) {
     ${opt.pct != null ? `<span class="pct">${opt.pct}</span>` : ''}
     <span class="pv">${signed}${fmtINR(v, dpFor(v))}${usd ? ` <span class="pu">(${signed}${usd})</span>` : ''}</span>
     <span class="pd ${a.cls}" title="${esc(opt.vsTxt || '')}">${a.ar} ${dtxt}</span>
+    ${opt.pn ? `<span class="pn">${esc(opt.pn)}</span>` : ''}
   </div>`;
 }
 
@@ -556,17 +557,21 @@ function simpleMetal(metal) {
     } else {
       duty = priceCell(P('duty'), Q('duty'), fxRate, { pct: `${Math.round(cur.dutyPct * 100)}%`, vsTxt: 'moves with the world price' });
       gst = priceCell(P('gst'), Q('gst'), fxRate, { pct: '3%', vsTxt: r.vsTxt });
+      const landed = cur.intl + cur.duty;
+      const mPct = landed > 0 ? (cur.premium / landed) * 100 : null;
       prem = priceCell(P('premium'), Q('premium'), fxRate, { signed: true, cls: cur.premium >= 0 ? 'prem' : 'disc',
-        pct: cur.premium >= 0 ? 'premium' : 'discount', vsTxt: 'board price minus (world + duty)' });
-      fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final', vsTxt: r.vsTxt });
+        pct: mPct != null ? `${mPct >= 0 ? '+' : '−'}${Math.abs(mPct).toFixed(1)}%` : null,
+        pn: `${r.key === 'india' ? 'IBJA' : 'MJDTA'} market rate`, vsTxt: 'board price minus (world + duty)' });
+      fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final total', vsTxt: r.vsTxt,
+        pn: 'incl. 15% duty, dealer margin & 3% GST' });
     }
     return `<tr class="row-${r.key}">
       <th scope="row" class="where"><span class="fl" aria-hidden="true">${r.flag}</span><div><b>${r.name}</b><small>${esc(r.sub)}</small><small class="when">${esc(r.when)}</small>${r.when2 ? `<small class="when2">${esc(r.when2)}</small>` : ''}</div></th>
       <td data-l="International rate">${intl}</td>
       <td data-l="Import duty">${duty}</td>
       <td data-l="GST">${gst}</td>
-      <td data-l="Dealer premium">${prem}</td>
-      <td data-l="${r.key === 'world' ? 'Final (no Indian tax)' : 'Final cost in India'}" class="fcol">${fin}</td>
+      <td data-l="Dealer margin (market rate)">${prem}</td>
+      <td data-l="${r.key === 'world' ? 'Final (no Indian tax)' : 'Total price (incl. all taxes)'}" class="fcol">${fin}</td>
     </tr>`;
   };
   const seg = `<div class="seg sm" role="radiogroup" aria-label="${isGold ? 'Gold' : 'Silver'} unit">${['g', '10g', 'kg'].map((u) => `<button role="radio" data-metal="${metal}" data-su="${u}" aria-checked="${u === unit}">${UNIT_TXT[u]}</button>`).join('')}</div>`;
@@ -577,7 +582,7 @@ function simpleMetal(metal) {
       ${seg}
     </div>
     <div class="sv-tbl"><table class="sv">
-      <thead><tr><th>Where</th><th>International rate<small>world price in ₹</small></th><th>Import duty<small>tax to bring metal in</small></th><th>GST<small>sales tax</small></th><th>Dealer premium<small>(+) extra / (−) discount</small></th><th>Final cost in India<small>before making charges</small></th></tr></thead>
+      <thead><tr><th>Where</th><th>International rate<small>world price in ₹</small></th><th>Import duty<small>tax to bring metal in</small></th><th>GST<small>sales tax</small></th><th>Dealer margin (market rate)<small>(+) extra / (−) discount</small></th><th class="fcol-h">Total price<small>incl. all taxes · before making charges</small></th></tr></thead>
       <tbody>${rows.map(fmtRow).join('')}</tbody>
     </table></div>
   </section>`;
@@ -619,8 +624,8 @@ function renderSimple() {
       <div><b>International rate</b> = world price, changed into rupees</div>
       <div><b>Import duty (15%)</b> = tax India charges to bring metal in</div>
       <div><b>GST (3%)</b> = sales tax on the metal</div>
-      <div><b>Dealer premium</b> = what Indian dealers add (+) or knock off (−)</div>
-      <div><b>Final cost</b> = what 999 metal costs in India, before making charges</div>
+      <div><b>Dealer margin (market rate)</b> = what the market (IBJA / MJDTA) adds (+) or knocks off (−)</div>
+      <div><b>Total price</b> = world + duty + dealer margin + GST, before making charges</div>
     </div>
     ${simpleMetal('gold')}
     ${simpleMetal('silver')}
