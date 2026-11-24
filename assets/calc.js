@@ -2,14 +2,65 @@
 export const G_PER_OZ = 31.1035;      // grams per troy ounce
 export const OZ_PER_KG = 32.1507;     // troy ounces per kilogram
 export const UNIT_FACTOR = { g: 1, '10g': 10, kg: 1000 };
-// Gold (HS 7108) and silver (HS 7106): BCD 10% + AIDC 5% = 15% customs duty, then IGST 3% on the duty-paid value.
-// In force since 13 May 2026 (Notification Nos. 15/2026-Customs and 16/2026-Customs). A cut back to 6% has been
-// reported as "under consideration" since Aug 2026 but is NOT notified, so 15% stays until a new notification.
+// Levies on gold (HS 7108) and silver (HS 7106) come from taxes.json (data branch, kept current by
+// scraper/taxcheck.py; baseline in config/taxes.json). These defaults are only the offline fallback.
+export const DEFAULT_LEVIES = [
+  { id: 'bcd', name: 'Basic customs duty', short: 'BCD', group: 'duty', base: 'value', rate: 0.10 },
+  { id: 'aidc', name: 'Agriculture Infrastructure & Development Cess', short: 'AIDC', group: 'duty', base: 'value', rate: 0.05 },
+  { id: 'gst', name: 'GST', short: 'GST', group: 'gst', base: 'cumulative', rate: 0.03 },
+];
 export const DUTY = { bcd: 0.10, aidc: 0.05, gst: 0.03 };
 export const DUTY_SOURCE = {
   text: 'BCD 10% + AIDC 5% = 15% on gold and silver since 13 May 2026 (Customs Notifications 15/2026 & 16/2026); GST 3% on top.',
   url: 'https://www.business-standard.com/economy/news/india-hikes-import-duty-on-gold-and-silver-to-15-platinum-to-15-4-126051300762_1.html',
 };
+
+/** Rate of one levy in force on ISO date `day` (latest history entry with from <= day). */
+export function levyRate(levy, day) {
+  if (!levy) return null;
+  if (!Array.isArray(levy.history)) return levy.rate ?? null;
+  let best = null, ref = null;
+  for (const h of [...levy.history].sort((a, b) => (a.from < b.from ? -1 : 1))) if (h.from <= day) { best = h.rate; ref = h; }
+  return best == null ? null : best;
+}
+
+/** Levies for a metal on a date, with their rate; zero-rate and not-yet-effective levies dropped. */
+export function leviesOn(taxes, metal, day) {
+  const list = taxes?.metals?.[metal]?.levies;
+  if (!Array.isArray(list) || !list.length) return DEFAULT_LEVIES.map((l) => ({ ...l }));
+  return list.map((l) => {
+    const hist = [...(l.history || [])].sort((a, b) => (a.from < b.from ? -1 : 1)).filter((h) => h.from <= day);
+    const h = hist[hist.length - 1];
+    return h ? { id: l.id, name: l.name, short: l.short || l.id.toUpperCase(), group: l.group || 'duty', base: l.base || 'value', rate: h.rate, from: h.from, ref: h.ref || '' } : null;
+  }).filter((l) => l && l.rate > 0);
+}
+
+/**
+ * Every levy as its own line. base 'value' = % of the international value; 'duty' = % of the customs duty
+ * lines above it; 'cumulative' = % of the running total (GST). Returns lines, duty, gst, final, and rates.
+ */
+export function taxBreakdown(intl, levies = DEFAULT_LEVIES) {
+  if (!(intl > 0)) return null;
+  const lines = [];
+  let duty = 0;
+  for (const l of levies) if (l.base === 'value') { const a = intl * l.rate; lines.push({ ...l, amount: a }); if (l.group !== 'gst') duty += a; }
+  const valueDuty = duty;
+  for (const l of levies) if (l.base === 'duty') { const a = valueDuty * l.rate; lines.push({ ...l, amount: a }); duty += a; }
+  let running = intl + duty, gst = 0;
+  for (const l of levies) if (l.base === 'cumulative') { const a = running * l.rate; lines.push({ ...l, amount: a }); running += a; if (l.group === 'gst') gst += a; else duty += a; }
+  const order = levies.map((l) => l.id);
+  lines.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  const gstRate = levies.filter((l) => l.group === 'gst').reduce((s, l) => s + l.rate, 0);
+  return { intl, lines, duty, gst, final: intl + duty + gst, dutyPct: duty / intl, gstRate, mult: (intl + duty + gst) / intl };
+}
+
+/** Plain text like "BCD 10% + AIDC 5% = 15% duty, then GST 3%". */
+export function leviesText(levies) {
+  const pc = (r) => `${+(r * 100).toFixed(2)}%`;
+  const d = levies.filter((l) => l.group !== 'gst'), g = levies.filter((l) => l.group === 'gst');
+  const dt = taxBreakdown(100, levies);
+  return `${d.map((l) => `${l.short} ${pc(l.rate)}${l.base === 'duty' ? ' of duty' : ''}`).join(' + ')}${d.length > 1 ? ` = ${pc(dt.dutyPct)} duty` : ' duty'}${g.length ? `, then ${g.map((l) => `${l.short} ${pc(l.rate)}`).join(' + ')}` : ''}`;
+}
 
 export const IST_OFFSET_MIN = 330;
 export const MYT_OFFSET_MIN = 480;
@@ -45,7 +96,7 @@ export const ibjaGoldPerG = (per10g) => (per10g > 0 ? per10g / 10 : null);
 export const ibjaSilverPerG = (perKg) => (perKg > 0 ? perKg / 1000 : null);
 
 /**
- * Silver landed cost in India.
+ * Silver landed cost in India (legacy fixed-levy form; the UI uses taxBreakdown).
  * base = international price in INR; duty = base x (BCD + AIDC); GST = 3% of (base + duty).
  */
 export function silverLanded(baseInr, d = DUTY) {
@@ -67,18 +118,16 @@ export function silverLanded(baseInr, d = DUTY) {
  * market = board price incl. GST (local x 1.03); margin = market - final (dealer margin, negative = discount);
  * marginPct = margin / final x 100. premium = local - (intl + duty) is the same margin before GST.
  */
-export function simpleRow(intl, local = null, d = DUTY) {
+export function simpleRow(intl, local = null, levies = DEFAULT_LEVIES) {
   if (!(intl > 0)) return null;
-  if (local == null) return { intl, duty: null, gst: null, premium: null, margin: null, market: null, final: intl, dutyPct: null };
+  if (local == null) return { intl, duty: null, gst: null, premium: null, margin: null, market: null, final: intl, dutyPct: null, lines: [] };
   if (!(local > 0)) return null;
-  const dutyPct = d.bcd + d.aidc;
-  const duty = intl * dutyPct;
-  const gst = (intl + duty) * d.gst;
-  const final = intl + duty + gst;
-  const market = local * (1 + d.gst);
+  const b = taxBreakdown(intl, levies);
+  const final = b.final;
+  const market = local * (1 + b.gstRate);
   const margin = market - final;
-  const premium = local - (intl + duty);
-  return { intl, duty, gst, final, market, margin, marginPct: (margin / final) * 100, premium, dutyPct, local };
+  const premium = local - (intl + b.duty);
+  return { intl, duty: b.duty, gst: b.gst, final, market, margin, marginPct: (margin / final) * 100, premium, dutyPct: b.dutyPct, gstRate: b.gstRate, lines: b.lines, local };
 }
 
 /** Markup of price over a reference, as amount and %. */

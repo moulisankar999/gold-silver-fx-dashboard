@@ -118,6 +118,34 @@ test('simple view row: columns add up to the final price', () => {
   close(C.DUTY.bcd + C.DUTY.aidc, 0.15);
 });
 
+test('taxBreakdown: every levy is its own line, new levies flow into the total', () => {
+  const b = C.taxBreakdown(1000);
+  close(b.duty, 150); close(b.gst, 1150 * 0.03); close(b.final, 1150 * 1.03);
+  assert.deepEqual(b.lines.map((l) => l.id), ['bcd', 'aidc', 'gst']);
+  const taxes = { metals: { gold: { levies: [
+    { id: 'bcd', short: 'BCD', group: 'duty', base: 'value', history: [{ from: '2024-07-24', rate: 0.05 }, { from: '2026-05-13', rate: 0.10 }, { from: '2026-12-02', rate: 0.06 }] },
+    { id: 'aidc', short: 'AIDC', group: 'duty', base: 'value', history: [{ from: '2026-05-13', rate: 0.05 }] },
+    { id: 'sws', short: 'SWS', group: 'duty', base: 'duty', history: [{ from: '2026-12-02', rate: 0.10 }] },
+    { id: 'pmc', short: 'PMC', group: 'duty', base: 'value', history: [{ from: '2026-12-02', rate: 0.01 }] },
+    { id: 'gst', short: 'GST', group: 'gst', base: 'cumulative', history: [{ from: '2017-07-01', rate: 0.03 }] } ] } } };
+  const before = C.leviesOn(taxes, 'gold', '2026-12-01');
+  assert.deepEqual(before.map((l) => l.id), ['bcd', 'aidc', 'gst']);
+  close(C.taxBreakdown(1000, before).final, 1150 * 1.03);
+  const after = C.leviesOn(taxes, 'gold', '2026-12-02');
+  assert.deepEqual(after.map((l) => l.id), ['bcd', 'aidc', 'sws', 'pmc', 'gst']);
+  const a = C.taxBreakdown(1000, after);
+  // value duties 60 + 50 + 10 = 120; SWS 10% of 120 = 12; duty 132; GST 3% of 1132.
+  close(a.duty, 132); close(a.gst, 1132 * 0.03); close(a.final, 1132 * 1.03);
+  assert.equal(a.lines.length, 5);
+  close(a.lines.reduce((s, l) => s + l.amount, 0) + 1000, a.final);
+  assert.equal(C.leviesText(after), 'BCD 6% + AIDC 5% + SWS 10% of duty + PMC 1% = 13.2% duty, then GST 3%');
+  assert.equal(C.leviesText(C.DEFAULT_LEVIES), 'BCD 10% + AIDC 5% = 15% duty, then GST 3%');
+  // simpleRow follows the levies; no taxes file -> defaults.
+  const r = C.simpleRow(1000, 1300, after);
+  close(r.final, 1132 * 1.03); close(r.market, 1300 * 1.03); close(r.margin, 1300 * 1.03 - 1132 * 1.03);
+  assert.equal(C.leviesOn(null, 'gold', '2026-12-02').length, 3);
+});
+
 test('boardLabel always carries the date and says Today vs Last', async () => {
   const { boardLabel } = await import('../assets/calc.js');
   const now = new Date('2026-11-24T11:25:00Z'); // 4:55 PM IST Tue

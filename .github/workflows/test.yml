@@ -15,3 +15,4 @@ jobs:
       - run: pip install --quiet requests beautifulsoup4
       - run: node --test tests/calc.test.mjs
       - run: python tests/test_parsers.py
+      - run: python tests/test_taxcheck.py

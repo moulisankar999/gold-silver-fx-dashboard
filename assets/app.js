@@ -2,7 +2,7 @@ import {
   UNIT_FACTOR, DUTY, OZ_PER_KG, toUnit, spotToInr, gold24From22, ibjaGoldPerG, ibjaSilverPerG,
   silverLanded, markup, pctChange, fmtMytIst, ageMinutes, fmtAge, mcxSession, ibjaWindow,
   ibjaExpectedDate, mjdtaStale, boardLabel, unchangedSince, fmtINR, fmtNum, fmtUSD, dpFor, zoneParts, IST_OFFSET_MIN, MYT_OFFSET_MIN,
-  simpleRow, DUTY_SOURCE, G_PER_OZ,
+  simpleRow, DUTY_SOURCE, G_PER_OZ, leviesOn, taxBreakdown, leviesText,
 } from './calc.js';
 
 // ------------------------------------------------------------ config
@@ -24,6 +24,7 @@ const state = {
   er: null, erErr: null,
   ticks: loadTicks(),
   nextLive: 0,
+  taxes: null,
 };
 
 // ------------------------------------------------------------ helpers
@@ -32,6 +33,37 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const unitLabel = () => ({ g: 'per g', '10g': 'per 10 g', kg: 'per kg' }[state.unit]);
 const inr = (v) => fmtINR(v, v == null ? 0 : dpFor(v));
 const SRC = (k) => state.scraped?.sources?.[k] || null;
+const istDay = () => new Date(Date.now() + IST_OFFSET_MIN * 60000).toISOString().slice(0, 10);
+const LEVIES = (metal) => leviesOn(state.taxes, metal, istDay());
+const pc = (r) => `${+(r * 100).toFixed(2)}%`;
+/** Green banner for a tax change the checker applied (30 days), amber for an unconfirmed one. */
+function taxBanner() {
+  const t = state.taxes; if (!t) return '';
+  const now = Date.now(), out = [];
+  const recent = (t.changes || []).filter((c) => now - Date.parse(c.detectedAt) < 30 * 864e5);
+  const seen = new Set();
+  for (const c of recent.slice().reverse()) {
+    const k = `${c.levy}|${c.from}|${c.to}|${c.effective}`; const metals = recent.filter((x) => `${x.levy}|${x.from}|${x.to}|${x.effective}` === k).map((x) => x.metal);
+    if (seen.has(k)) continue; seen.add(k);
+    const what = c.from == null ? `New levy: ${c.name} (${c.short}) ${pc(c.to)}` : `${c.levy === 'gst' ? 'GST' : c.short === 'BCD' ? 'Import duty (BCD)' : c.name + ' (' + c.short + ')'} changed from ${pc(c.from)} to ${pc(c.to)}`;
+    out.push(`<div class="tax-banner ok" role="status"><b>✅ ${esc(what)}</b> on ${esc(metals.join(' & '))}, effective ${esc(fmtDay(c.effective))} <a href="${esc(c.url)}" target="_blank" rel="noopener">(${esc(c.ref || 'source')})</a>. Prices below already use it.</div>`);
+  }
+  for (const a of (t.alerts || []).filter((a) => a.status === 'open')) {
+    out.push(`<div class="tax-banner warn" role="status"><b>⚠️ Possible tax change — checking.</b> ${esc(a.title)} <a href="${esc(a.url)}" target="_blank" rel="noopener">(${a.kind === 'news' ? 'news' : 'official notice'})</a>. Current rates are kept until it is confirmed.</div>`);
+  }
+  return out.join('');
+}
+function taxSourceTxt() {
+  const g = (state.taxes?.metals?.gold?.levies || []).flatMap((l) => (l.history || []).filter((h) => h.from <= istDay()).slice(-1).map((h) => h.ref)).filter(Boolean);
+  return g.length ? [...new Set(g)].join(', ') : DUTY_SOURCE.text;
+}
+function fmtDay(d) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${+m[3]} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m[2] - 1]} ${m[1]}` : d; }
+/** Small per-levy lines under a cell, e.g. "BCD 10% ₹10,866". */
+function levyLines(lines, f, group) {
+  const ls = lines.filter((l) => (group === 'gst' ? l.group === 'gst' : l.group !== 'gst'));
+  if (ls.length < 2 && group === 'gst') return '';
+  return `<span class="lv">${ls.map((l) => `<span title="${esc(l.name)}${l.ref ? ' · ' + esc(l.ref) : ''}">${esc(l.short)} ${pc(l.rate)}${l.base === 'duty' ? ' of duty' : ''} ${fmtINR(l.amount * f, dpFor(l.amount * f))}</span>`).join('')}</span>`;
+}
 
 async function getJSON(url, timeoutMs = 12000) {
   const ctl = new AbortController();
@@ -209,6 +241,7 @@ function renderStatus() {
   const scraperLate = ageMinutes(gen) > STALE.scraper;
   const ist = zoneParts(now, IST_OFFSET_MIN);
   const mjdtaNext = ist.minutes < 9 * 60 + 30 ? 'Chennai morning print ~9:30 AM IST' : ist.minutes < 15 * 60 + 30 ? 'Chennai afternoon print ~3:30 PM IST (if any)' : 'Chennai next print ~9:30 AM IST';
+  const tb = $('#taxbar'); if (tb) tb.innerHTML = taxBanner();
   $('#statusbar').innerHTML = [
     `<span class="pill"><span class="dot ${liveOk ? 'on' : 'off'}"></span>Live spot/FX ${liveOk ? `· ${fmtMytIst(state.live.at)}` : '· unavailable, using scraped data'}</span>`,
     `<span class="pill"><span class="dot ${!gen ? 'off' : scraperLate ? 'wait' : 'on'}"></span>Scraped data ${gen ? `· ${fmtAge(ageMinutes(gen))}` : `· ${esc(state.scrapedErr || 'loading')}`}</span>`,
@@ -374,7 +407,9 @@ function renderBreakdown() {
   if (!s || !fx) { el.innerHTML = sectionHead('Silver', 'Silver landed-cost breakdown') + `<div class="callout err">Needs both live silver and USD/INR; one is unavailable right now.</div>`; return; }
   const usdKg = s.usd * OZ_PER_KG;
   const baseKg = usdKg * fx.rate;
-  const L = silverLanded(baseKg);
+  const LV = LEVIES('silver');
+  const TB = taxBreakdown(baseKg, LV);
+  const L = { base: baseKg, duty: TB.duty, dutyPaid: baseKg + TB.duty, gst: TB.gst, landed: TB.final };
   const ib = ibjaLatest();
   const ibKg = ib?.cur?.vals?.s999 || null;
   const ch = chennaiBoard()?.primary;
@@ -388,17 +423,15 @@ function renderBreakdown() {
   el.innerHTML = sectionHead('Silver · step by step', `Silver landed cost ${unitLabel()}`) +
     `<div class="steps">
       ${step(1, 'International silver in INR', `${fmtUSD(s.usd, 3)}/oz × 32.1507 oz/kg × USD/INR ${fmtNum(fx.rate, 4)}`, inr(L.base * f), `(${fmtUSD(usdKg * f, 2)})`)}
-      ${step(2, '+ Basic customs duty 10%', '10% of step 1', inr(L.bcd * f))}
-      ${step(3, '+ AIDC 5%', '5% of step 1 · total import duty 15%', inr(L.aidc * f), `Duty-paid ${inr(L.dutyPaid * f)}`)}
-      ${step(4, '+ GST 3%', '3% of the duty-paid value', inr(L.gst * f))}
-      ${step('=', 'Landed Indian rate', 'Step 1 × 1.15 × 1.03', inr(L.landed * f), `(${fmtUSD(usdKg * 1.15 * 1.03 * f, 2)})`, 'total')}
+      ${TB.lines.map((l, i) => step(i + 2, `+ ${esc(l.name)} (${esc(l.short)}) ${pc(l.rate)}`, `${pc(l.rate)} of ${l.base === 'value' ? 'step 1' : l.base === 'duty' ? 'the customs duty above' : 'the running total (duty-paid value)'}${l.ref ? ' · ' + esc(l.ref) : ''}`, inr(l.amount * f), l.group !== 'gst' && TB.lines[i + 1]?.group === 'gst' ? `Duty-paid ${inr(L.dutyPaid * f)} · duty ${pc(TB.dutyPct)}` : '')).join('')}
+      ${step('=', 'Landed Indian rate', `Step 1 × ${fmtNum(TB.mult, 4)}`, inr(L.landed * f), `(${fmtUSD(usdKg * TB.mult * f, 2)})`, 'total')}
     </div>
     <div style="height:12px"></div>
     <div class="tbl"><table class="t"><thead><tr><th>Market rate</th><th>Price ${unitLabel()}</th><th>Markup vs landed</th><th>%</th><th>vs duty-paid (ex-GST)</th></tr></thead><tbody>
       ${row(`IBJA Silver 999${ib?.cur ? ` (${ib.cur.sess})` : ''}`, ibKg, ib?.cur ? `${ib.d.date} ${ib.cur.sess} print` : 'unavailable')}
       ${row(`Chennai silver (${ch ? (ch.entry.source.startsWith('MJDTA') ? 'MJDTA' : 'CWJA') : '—'})`, chKg, ch ? `board ${fmtMytIst(ch.updatedAt)}` : 'unavailable')}
     </tbody></table></div>
-    <p class="sec-note">Inputs: silver ${esc(s.source)} at ${esc(fmtMytIst(s.t))}; USD/INR ${esc(fx.source)} at ${esc(fmtMytIst(fx.t))}. Duty: BCD 10% + AIDC 5% on silver (HS 7106) since 13 May 2026; the customs tariff value and bank charges are ignored. IBJA and Chennai boards exclude GST, so the last column (vs duty-paid, before GST) is the like-for-like premium.</p>`;
+    <p class="sec-note">Inputs: silver ${esc(s.source)} at ${esc(fmtMytIst(s.t))}; USD/INR ${esc(fx.source)} at ${esc(fmtMytIst(fx.t))}. Taxes from the auto-updated tax file: ${esc(leviesText(LV))} (${esc(taxSourceTxt())}); the customs tariff value and bank charges are ignored. IBJA and Chennai boards exclude GST, so the last column (vs duty-paid, before GST) is the like-for-like premium.</p>`;
 }
 
 function renderSources() {
@@ -538,9 +571,12 @@ function simpleMetal(metal) {
     { key: 'chennai', name: 'Chennai', sub: isGold ? `MJDTA board · 24K (22K ₹${ch22 ? fmtNum(ch22, 0) : '—'}/g)` : 'MJDTA board', flag: '🏙️', local: chCur, localPrev: chPrev,
       when: chWhen, when2: chWhen2, src: ch ? ch.name : 'Chennai unavailable', vsTxt: 'vs previous board print' },
   ];
+  const LV = LEVIES(metal);
+  const TB = taxBreakdown(100, LV);
+  const dutyTxt = pc(TB.dutyPct), gstTxt = pc(TB.gstRate);
   const fmtRow = (r) => {
-    const cur = B ? simpleRow(B, r.local) : null;
-    const prv = (Bprev || B) ? simpleRow(Bprev || B, r.local == null ? null : (r.localPrev ?? r.local)) : null;
+    const cur = B ? simpleRow(B, r.local, LV) : null;
+    const prv = (Bprev || B) ? simpleRow(Bprev || B, r.local == null ? null : (r.localPrev ?? r.local), LV) : null;
     const P = (k) => (cur?.[k] != null ? cur[k] * f : null);
     const Q = (k) => (prv?.[k] != null ? prv[k] * f : null);
     const naLocal = r.local == null && r.key !== 'world' ? 'not posted' : null;
@@ -552,19 +588,20 @@ function simpleMetal(metal) {
       fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final', vsTxt: r.vsTxt });
     } else if (!cur) {
       const why = !B ? 'needs world price' : naLocal || 'unavailable';
-      duty = priceCell(B ? B * 0.15 * f : null, null, fxRate, { na: why, pct: '15%' });
-      gst = priceCell(B ? B * 1.15 * 0.03 * f : null, null, fxRate, { na: why, pct: '3%' });
-      fin = priceCell(B ? B * 1.15 * 1.03 * f : null, Bprev ? Bprev * 1.15 * 1.03 * f : null, fxRate, { cls: 'final total', pn: 'world + 15% duty + 3% GST', vsTxt: 'vs previous update' })
+      const bb = B ? taxBreakdown(B, LV) : null, bp = Bprev ? taxBreakdown(Bprev, LV) : null;
+      duty = priceCell(bb ? bb.duty * f : null, null, fxRate, { na: why, pct: dutyTxt });
+      gst = priceCell(bb ? bb.gst * f : null, null, fxRate, { na: why, pct: gstTxt });
+      fin = priceCell(bb ? bb.final * f : null, bp ? bp.final * f : null, fxRate, { cls: 'final total', pn: `world + ${dutyTxt} duty + ${gstTxt} GST`, vsTxt: 'vs previous update' })
         + `<div class="mg na"><div class="mg-l">Dealer margin (market rate)</div><span class="pn">${esc(why)}</span></div>`;
     } else {
       const mkt = r.key === 'india' ? 'IBJA' : 'MJDTA';
-      duty = priceCell(P('duty'), Q('duty'), fxRate, { pct: `${Math.round(cur.dutyPct * 100)}%`, vsTxt: 'moves with the world price' });
-      gst = priceCell(P('gst'), Q('gst'), fxRate, { pct: '3%', pn: 'on world + duty', vsTxt: 'moves with the world price' });
+      duty = priceCell(P('duty'), Q('duty'), fxRate, { pct: dutyTxt, vsTxt: 'moves with the world price' }).replace(/<\/div>\s*$/, `${levyLines(cur.lines, f, 'duty')}</div>`);
+      gst = priceCell(P('gst'), Q('gst'), fxRate, { pct: gstTxt, pn: 'on world + duty', vsTxt: 'moves with the world price' }).replace(/<\/div>\s*$/, `${levyLines(cur.lines, f, 'gst')}</div>`);
       const m = cur.marginPct;
       const margin = priceCell(P('margin'), Q('margin'), fxRate, { signed: true, cls: `mgv ${cur.margin >= 0 ? 'prem' : 'disc'}`,
         pct: `${m >= 0 ? "+" : "−"}${Math.abs(m).toFixed(Math.abs(m) < 1 ? 2 : 1)}%`, vsTxt: `${mkt} price incl. GST minus total` });
       const market = priceCell(P('market'), Q('market'), fxRate, { cls: 'mkt', vsTxt: r.vsTxt });
-      fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final total', pn: 'world + 15% duty + 3% GST · no dealer margin', vsTxt: 'moves with the world price' })
+      fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final total', pn: `world + ${dutyTxt} duty + ${gstTxt} GST · no dealer margin`, vsTxt: 'moves with the world price' })
         + `<div class="mg"><div class="mg-l">Dealer margin <span>(market rate)</span> · ${mkt}</div>${margin}`
         + `<div class="mg-l mk">Market price (${mkt}, incl. GST)</div>${market}</div>`;
     }
@@ -584,7 +621,7 @@ function simpleMetal(metal) {
       ${seg}
     </div>
     <div class="sv-tbl"><table class="sv">
-      <thead><tr><th>Where</th><th>International rate<small>world price in ₹</small></th><th>Import duty<small>tax to bring metal in</small></th><th>GST<small>3% of world + duty</small></th><th class="fcol-h">Total price (incl. duty &amp; GST)<small>no dealer margin · dealer margin (market rate) below</small></th></tr></thead>
+      <thead><tr><th>Where</th><th>International rate<small>world price in ₹</small></th><th>Import duty<small>${esc(LV.filter((l) => l.group !== 'gst').map((l) => l.short).join(' + '))} · tax to bring metal in</small></th><th>GST<small>${gstTxt} of world + duty</small></th><th class="fcol-h">Total price (incl. duty &amp; GST)<small>no dealer margin · dealer margin (market rate) below</small></th></tr></thead>
       <tbody>${rows.map(fmtRow).join('')}</tbody>
     </table></div>
   </section>`;
@@ -622,17 +659,18 @@ function renderSimple() {
       <div><h2>What gold & silver cost today</h2><p>From the world price, add India’s taxes, and see what it costs in India and Chennai.</p></div>
       <span class="pill"><span class="dot ${live ? 'on' : 'wait'}"></span>${live ? `Live · ${esc(fmtMytIst(state.live.at))}` : 'Loading live prices…'}</span>
     </div>
+    ${taxBanner()}
     <div class="sv-explain">
       <div><b>International rate</b> = world price, changed into rupees</div>
-      <div><b>Import duty (15%)</b> = tax India charges to bring metal in</div>
-      <div><b>GST (3%)</b> = sales tax on (world + duty)</div>
+      <div><b>Import duty (${pc(taxBreakdown(100, LEVIES('gold')).dutyPct)})</b> = tax India charges to bring metal in: ${esc(LEVIES('gold').filter((l) => l.group !== 'gst').map((l) => `${l.short} ${pc(l.rate)}`).join(' + '))}</div>
+      <div><b>GST (${pc(taxBreakdown(100, LEVIES('gold')).gstRate)})</b> = sales tax on (world + duty)</div>
       <div><b>Total price</b> = world + duty + GST, with no dealer margin</div>
       <div><b>Dealer margin (market rate)</b> = market price (IBJA / MJDTA, incl. GST) minus the total: what dealers add (+) or knock off (−)</div>
     </div>
     ${simpleMetal('gold')}
     ${simpleMetal('silver')}
     ${simpleFx()}
-    <p class="sv-note">▲ up · ▼ down · ▬ no change. World price arrows compare with the previous update; India and Chennai compare with the previous board print. Dollar figures in brackets use today’s USD/INR. Import duty: ${esc(DUTY_SOURCE.text)} <a href="${esc(DUTY_SOURCE.url)}" target="_blank" rel="noopener">Source</a>. A cut back to 6% has been reported as under consideration but is not in force. Chennai 24K is worked out from the 22K board (× 24 ÷ 22). Boards and IBJA exclude GST, so the market price adds 3% GST to the board rate before the dealer margin is worked out.</p>`;
+    <p class="sv-note">▲ up · ▼ down · ▬ no change. World price arrows compare with the previous update; India and Chennai compare with the previous board print. Dollar figures in brackets use today’s USD/INR. Taxes in force today: gold ${esc(leviesText(LEVIES('gold')))}; silver ${esc(leviesText(LEVIES('silver')))} (${esc(taxSourceTxt())}). Checked automatically against CBIC Customs and GST notifications${state.taxes?.checkedAt ? `, last check ${esc(fmtMytIst(state.taxes.checkedAt))}` : ''}; any new levy appears as its own line. Chennai 24K is worked out from the 22K board (× 24 ÷ 22). Boards and IBJA exclude GST, so the market price adds 3% GST to the board rate before the dealer margin is worked out.</p>`;
   el.querySelectorAll('[data-su]').forEach((b) => b.addEventListener('click', () => {
     SIMPLE_UNITS[b.dataset.metal] = b.dataset.su; localStorage.setItem(`gsfx-su-${b.dataset.metal}`, b.dataset.su); renderSimple();
   }));
@@ -665,12 +703,19 @@ async function loadScraped() {
       getJSON(`${DATA_BASE}history.json?t=${Date.now()}`).catch(() => null),
     ]);
     state.scraped = latest; state.scrapedErr = null; state.scrapedAt = new Date().toISOString();
+    loadTaxes();
     if (hist) state.history = hist;
     try { localStorage.setItem('gsfx-scraped', JSON.stringify(latest)); } catch { /* ignore */ }
   } catch (e) {
     state.scrapedErr = `${e.name === 'AbortError' ? 'timeout' : e.message}`;
     if (!state.scraped) { try { state.scraped = JSON.parse(localStorage.getItem('gsfx-scraped')); } catch { /* ignore */ } }
   }
+}
+
+async function loadTaxes() {
+  try { state.taxes = await getJSON(`${DATA_BASE}taxes.json?t=${Date.now()}`); }
+  catch { try { state.taxes = state.taxes || await getJSON(`config/taxes.json?t=${Date.now()}`); } catch { /* defaults */ } }
+  try { renderSimple(); renderBreakdown(); renderStatus(); } catch { /* ignore */ }
 }
 
 async function loadLive() {

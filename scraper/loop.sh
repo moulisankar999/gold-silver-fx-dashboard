@@ -28,7 +28,11 @@ while :; do
   rm -rf out; mkdir -p out
   if python3 scraper/scrape.py --prev "$PREV" --out out/data > scrape.log 2>&1; then
     cat scrape.log
-    if grep -q '^CHANGED' scrape.log; then publish; fi
+    # Tax levies (import duty, AIDC, GST, any new cess): checked every 6 h, written as data/taxes.json.
+    python3 scraper/taxcheck.py --prev "$PREV" --out out/data --min-hours "${TAX_EVERY_H:-6}" > tax.log 2>&1 || echo "::warning::tax check failed"
+    cat tax.log
+    [ -f out/data/taxes.json ] || { [ -f "$PREV/taxes.json" ] && cp "$PREV/taxes.json" out/data/; }
+    if grep -q '^CHANGED' scrape.log tax.log; then publish; fi
     rm -rf next-prev && cp -r out/data next-prev && rm -rf prev && mv next-prev prev
   else
     cat scrape.log; echo "::warning::scrape #$i failed"

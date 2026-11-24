@@ -219,3 +219,9 @@ table.sv{width:100%;border-collapse:separate;border-spacing:0;font-variant-numer
 @media (max-width:760px){
   .sv tr.row-india td.fcol .mg,.sv tr.row-chennai td.fcol .mg{align-items:flex-start;text-align:left}
 }
+/* Tax banners + per-levy lines */
+.tax-banner{margin:0 0 12px;padding:11px 14px;border-radius:14px;font-size:13.5px;line-height:1.45;border:1px solid}
+.tax-banner a{color:inherit;text-decoration:underline}
+.tax-banner.ok{background:color-mix(in srgb,#22c55e 13%,var(--card));border-color:color-mix(in srgb,#22c55e 45%,transparent)}
+.tax-banner.warn{background:color-mix(in srgb,#f59e0b 15%,var(--card));border-color:color-mix(in srgb,#f59e0b 55%,transparent)}
+.pc .lv{display:flex;flex-direction:column;gap:1px;font-size:10.5px;color:var(--muted);margin-top:2px;align-items:inherit}

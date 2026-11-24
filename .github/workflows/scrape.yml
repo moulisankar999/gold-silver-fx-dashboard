@@ -11,6 +11,7 @@ on:
     - cron: '50 2 * * 1-6'           # backup chain starters
     - cron: '10,40 3 * * 1-6'
     - cron: '0 3 1 * *'              # monthly keep-alive (re-enables this schedule)
+    - cron: '30 3 * * 0'             # Sunday 9:00 AM IST: one short run so the daily tax check also runs on Sundays
   workflow_dispatch:
     inputs:
       loop_minutes:
@@ -24,6 +25,7 @@ concurrency:
 permissions:
   contents: write
   actions: write
+  issues: write
 
 jobs:
   scrape:
@@ -39,7 +41,9 @@ jobs:
           python-version: '3.12'
 
       - name: Install deps
-        run: pip install --quiet requests beautifulsoup4
+        run: |
+          pip install --quiet requests beautifulsoup4
+          command -v pdftotext >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils)
 
       - name: Load previous data (data branch)
         run: |
@@ -48,12 +52,13 @@ jobs:
             git fetch --quiet --depth=1 origin data
             git show FETCH_HEAD:data/latest.json  > prev/latest.json  || true
             git show FETCH_HEAD:data/history.json > prev/history.json || true
+            git show FETCH_HEAD:data/taxes.json   > prev/taxes.json   || rm -f prev/taxes.json
           fi
 
       - name: Scrape every 10 min for ~45 min, publish on change
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LOOP_MINUTES: ${{ inputs.loop_minutes || '50' }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || (github.event.schedule == '30 3 * * 0' && '1') || '50' }}
           INTERVAL_SEC: '600'
         run: bash scraper/loop.sh
 
