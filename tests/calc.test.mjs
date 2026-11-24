@@ -97,10 +97,20 @@ test('MCX expiry: 5th or previous weekday', () => {
 test('simple view row: columns add up to the final price', () => {
   const r = C.simpleRow(11720, 13769);
   close(r.duty, 11720 * 0.15);
-  close(r.gst, 13769 * 0.03);
+  close(r.gst, 11720 * 1.15 * 0.03);
+  close(r.final, 11720 * 1.15 * 1.03);
+  close(r.intl + r.duty + r.gst, r.final);
+  close(r.market, 13769 * 1.03);
+  close(r.margin, 13769 * 1.03 - 11720 * 1.15 * 1.03);
+  close(r.final + r.margin, r.market);
+  close(r.marginPct, (r.margin / r.final) * 100);
   close(r.premium, 13769 - 11720 * 1.15);
-  close(r.final, 13769 * 1.03);
-  close(r.intl + r.duty + r.premium + r.gst, r.final);
+  // Same metal, two markets: identical landed total, different margins.
+  const r2 = C.simpleRow(11720, 13000);
+  close(r2.final, r.final);
+  assert.ok(r2.margin < r.margin);
+  // Board below landed cost = discount.
+  assert.ok(C.simpleRow(11720, 13000 / 1.2).margin < 0);
   const w = C.simpleRow(11720);
   assert.equal(w.duty, null); assert.equal(w.final, 11720);
   assert.equal(C.simpleRow(0, 100), null);

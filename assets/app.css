@@ -207,3 +207,15 @@ table.sv{width:100%;border-collapse:separate;border-spacing:0;font-variant-numer
   .sv tr.row-india td:not(.fcol),.sv tr.row-chennai td:not(.fcol){font-size:12.5px}
   .sv tr.row-india td:not(.fcol)::before,.sv tr.row-chennai td:not(.fcol)::before{font-size:12px}
 }
+/* Landed total + dealer margin (market rate) block under it */
+.sv td.fcol .mg{margin-top:8px;padding-top:7px;border-top:1px dashed var(--line);display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
+.mg-l{font-size:11.5px;font-weight:800;color:var(--text)}
+.mg-l span{color:var(--gold);font-weight:800}
+.sv-card.silver .mg-l span{color:var(--muted)}
+.mg-l.mk{margin-top:4px;font-weight:700;color:var(--muted)}
+.sv td.fcol .pc.mgv .pv{font-size:16px;font-weight:850}
+.sv td.fcol .pc.mkt .pv{font-size:13px;font-weight:700}
+.sv td.fcol .pc.mkt .pd{font-size:11px}
+@media (max-width:760px){
+  .sv tr.row-india td.fcol .mg,.sv tr.row-chennai td.fcol .mg{align-items:flex-start;text-align:left}
+}

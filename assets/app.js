@@ -546,32 +546,34 @@ function simpleMetal(metal) {
     const naLocal = r.local == null && r.key !== 'world' ? 'not posted' : null;
     const notApp = '<div class="pc na"><span class="pv">—</span><span class="pn">not applicable</span></div>';
     const intl = priceCell(B ? B * f : null, Bprev ? Bprev * f : null, fxRate, { vsTxt: 'vs previous update' });
-    let duty, gst, prem, fin;
+    let duty, gst, fin;
     if (r.key === 'world') {
-      duty = notApp; gst = notApp; prem = notApp;
+      duty = notApp; gst = notApp;
       fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final', vsTxt: r.vsTxt });
     } else if (!cur) {
       const why = !B ? 'needs world price' : naLocal || 'unavailable';
       duty = priceCell(B ? B * 0.15 * f : null, null, fxRate, { na: why, pct: '15%' });
-      gst = prem = fin = priceCell(null, null, fxRate, { na: why });
+      gst = priceCell(B ? B * 1.15 * 0.03 * f : null, null, fxRate, { na: why, pct: '3%' });
+      fin = priceCell(B ? B * 1.15 * 1.03 * f : null, Bprev ? Bprev * 1.15 * 1.03 * f : null, fxRate, { cls: 'final total', pn: 'world + 15% duty + 3% GST', vsTxt: 'vs previous update' })
+        + `<div class="mg na"><div class="mg-l">Dealer margin (market rate)</div><span class="pn">${esc(why)}</span></div>`;
     } else {
+      const mkt = r.key === 'india' ? 'IBJA' : 'MJDTA';
       duty = priceCell(P('duty'), Q('duty'), fxRate, { pct: `${Math.round(cur.dutyPct * 100)}%`, vsTxt: 'moves with the world price' });
-      gst = priceCell(P('gst'), Q('gst'), fxRate, { pct: '3%', vsTxt: r.vsTxt });
-      const landed = cur.intl + cur.duty;
-      const mPct = landed > 0 ? (cur.premium / landed) * 100 : null;
-      prem = priceCell(P('premium'), Q('premium'), fxRate, { signed: true, cls: cur.premium >= 0 ? 'prem' : 'disc',
-        pct: mPct != null ? `${mPct >= 0 ? '+' : '−'}${Math.abs(mPct).toFixed(1)}%` : null,
-        pn: `${r.key === 'india' ? 'IBJA' : 'MJDTA'} market rate`, vsTxt: 'board price minus (world + duty)' });
-      fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final total', vsTxt: r.vsTxt,
-        pn: 'incl. 15% duty, dealer margin & 3% GST' });
+      gst = priceCell(P('gst'), Q('gst'), fxRate, { pct: '3%', pn: 'on world + duty', vsTxt: 'moves with the world price' });
+      const m = cur.marginPct;
+      const margin = priceCell(P('margin'), Q('margin'), fxRate, { signed: true, cls: `mgv ${cur.margin >= 0 ? 'prem' : 'disc'}`,
+        pct: `${m >= 0 ? "+" : "−"}${Math.abs(m).toFixed(Math.abs(m) < 1 ? 2 : 1)}%`, vsTxt: `${mkt} price incl. GST minus total` });
+      const market = priceCell(P('market'), Q('market'), fxRate, { cls: 'mkt', vsTxt: r.vsTxt });
+      fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final total', pn: 'world + 15% duty + 3% GST · no dealer margin', vsTxt: 'moves with the world price' })
+        + `<div class="mg"><div class="mg-l">Dealer margin <span>(market rate)</span> · ${mkt}</div>${margin}`
+        + `<div class="mg-l mk">Market price (${mkt}, incl. GST)</div>${market}</div>`;
     }
     return `<tr class="row-${r.key}">
       <th scope="row" class="where"><span class="fl" aria-hidden="true">${r.flag}</span><div><b>${r.name}</b><small>${esc(r.sub)}</small><small class="when">${esc(r.when)}</small>${r.when2 ? `<small class="when2">${esc(r.when2)}</small>` : ''}</div></th>
       <td data-l="International rate">${intl}</td>
       <td data-l="Import duty">${duty}</td>
       <td data-l="GST">${gst}</td>
-      <td data-l="Dealer margin (market rate)">${prem}</td>
-      <td data-l="${r.key === 'world' ? 'Final (no Indian tax)' : 'Total price (incl. all taxes)'}" class="fcol">${fin}</td>
+      <td data-l="${r.key === 'world' ? 'Final (no Indian tax)' : 'Total price (incl. duty & GST)'}" class="fcol">${fin}</td>
     </tr>`;
   };
   const seg = `<div class="seg sm" role="radiogroup" aria-label="${isGold ? 'Gold' : 'Silver'} unit">${['g', '10g', 'kg'].map((u) => `<button role="radio" data-metal="${metal}" data-su="${u}" aria-checked="${u === unit}">${UNIT_TXT[u]}</button>`).join('')}</div>`;
@@ -582,7 +584,7 @@ function simpleMetal(metal) {
       ${seg}
     </div>
     <div class="sv-tbl"><table class="sv">
-      <thead><tr><th>Where</th><th>International rate<small>world price in ₹</small></th><th>Import duty<small>tax to bring metal in</small></th><th>GST<small>sales tax</small></th><th>Dealer margin (market rate)<small>(+) extra / (−) discount</small></th><th class="fcol-h">Total price<small>incl. all taxes · before making charges</small></th></tr></thead>
+      <thead><tr><th>Where</th><th>International rate<small>world price in ₹</small></th><th>Import duty<small>tax to bring metal in</small></th><th>GST<small>3% of world + duty</small></th><th class="fcol-h">Total price (incl. duty &amp; GST)<small>no dealer margin · dealer margin (market rate) below</small></th></tr></thead>
       <tbody>${rows.map(fmtRow).join('')}</tbody>
     </table></div>
   </section>`;
@@ -623,14 +625,14 @@ function renderSimple() {
     <div class="sv-explain">
       <div><b>International rate</b> = world price, changed into rupees</div>
       <div><b>Import duty (15%)</b> = tax India charges to bring metal in</div>
-      <div><b>GST (3%)</b> = sales tax on the metal</div>
-      <div><b>Dealer margin (market rate)</b> = what the market (IBJA / MJDTA) adds (+) or knocks off (−)</div>
-      <div><b>Total price</b> = world + duty + dealer margin + GST, before making charges</div>
+      <div><b>GST (3%)</b> = sales tax on (world + duty)</div>
+      <div><b>Total price</b> = world + duty + GST, with no dealer margin</div>
+      <div><b>Dealer margin (market rate)</b> = market price (IBJA / MJDTA, incl. GST) minus the total: what dealers add (+) or knock off (−)</div>
     </div>
     ${simpleMetal('gold')}
     ${simpleMetal('silver')}
     ${simpleFx()}
-    <p class="sv-note">▲ up · ▼ down · ▬ no change. World price arrows compare with the previous update; India and Chennai compare with the previous board print. Dollar figures in brackets use today’s USD/INR. Import duty: ${esc(DUTY_SOURCE.text)} <a href="${esc(DUTY_SOURCE.url)}" target="_blank" rel="noopener">Source</a>. A cut back to 6% has been reported as under consideration but is not in force. Chennai 24K is worked out from the 22K board (× 24 ÷ 22). Boards and IBJA exclude GST, so GST is added here.</p>`;
+    <p class="sv-note">▲ up · ▼ down · ▬ no change. World price arrows compare with the previous update; India and Chennai compare with the previous board print. Dollar figures in brackets use today’s USD/INR. Import duty: ${esc(DUTY_SOURCE.text)} <a href="${esc(DUTY_SOURCE.url)}" target="_blank" rel="noopener">Source</a>. A cut back to 6% has been reported as under consideration but is not in force. Chennai 24K is worked out from the 22K board (× 24 ÷ 22). Boards and IBJA exclude GST, so the market price adds 3% GST to the board rate before the dealer margin is worked out.</p>`;
   el.querySelectorAll('[data-su]').forEach((b) => b.addEventListener('click', () => {
     SIMPLE_UNITS[b.dataset.metal] = b.dataset.su; localStorage.setItem(`gsfx-su-${b.dataset.metal}`, b.dataset.su); renderSimple();
   }));

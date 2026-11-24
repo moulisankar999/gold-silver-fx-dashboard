@@ -62,18 +62,23 @@ export function silverLanded(baseInr, d = DUTY) {
  * One row of the Simple view, all per gram in INR.
  * intl = international price in INR. local = Indian board rate (IBJA / Chennai, which exclude GST).
  * World row (no local): final = intl, no taxes.
- * India / Chennai: duty = 15% of intl; premium = local - (intl + duty) (dealer premium, or discount if negative);
- * GST = 3% of local; final = local + GST. So intl + duty + premium + GST = final exactly.
+ * India / Chennai: final = landed tax-inclusive cost WITHOUT dealer margin:
+ *   duty = 15% of intl; gst = 3% of (intl + duty); final = intl + duty + gst.
+ * market = board price incl. GST (local x 1.03); margin = market - final (dealer margin, negative = discount);
+ * marginPct = margin / final x 100. premium = local - (intl + duty) is the same margin before GST.
  */
 export function simpleRow(intl, local = null, d = DUTY) {
   if (!(intl > 0)) return null;
-  if (local == null) return { intl, duty: null, gst: null, premium: null, final: intl, dutyPct: null };
+  if (local == null) return { intl, duty: null, gst: null, premium: null, margin: null, market: null, final: intl, dutyPct: null };
   if (!(local > 0)) return null;
   const dutyPct = d.bcd + d.aidc;
   const duty = intl * dutyPct;
+  const gst = (intl + duty) * d.gst;
+  const final = intl + duty + gst;
+  const market = local * (1 + d.gst);
+  const margin = market - final;
   const premium = local - (intl + duty);
-  const gst = local * d.gst;
-  return { intl, duty, gst, premium, final: local + gst, dutyPct, local };
+  return { intl, duty, gst, final, market, margin, marginPct: (margin / final) * 100, premium, dutyPct, local };
 }
 
 /** Markup of price over a reference, as amount and %. */
