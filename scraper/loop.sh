@@ -32,7 +32,11 @@ while :; do
     python3 scraper/taxcheck.py --prev "$PREV" --out out/data --min-hours "${TAX_EVERY_H:-6}" > tax.log 2>&1 || echo "::warning::tax check failed"
     cat tax.log
     [ -f out/data/taxes.json ] || { [ -f "$PREV/taxes.json" ] && cp "$PREV/taxes.json" out/data/; }
-    if grep -q '^CHANGED' scrape.log tax.log; then publish; fi
+    # Prediction tab inputs + board prints (merged from india-gold-rate-predictor) -> data/predict/.
+    mkdir -p out/data/predict
+    if python3 scraper/predict_scrape.py --prev "$PREV/predict" --out out/data/predict > predict.log 2>&1; then cat predict.log
+    else cat predict.log; echo "::warning::predict scrape #$i failed"; rm -rf out/data/predict; [ -d "$PREV/predict" ] && cp -r "$PREV/predict" out/data/predict; fi
+    if grep -q '^CHANGED' scrape.log tax.log predict.log 2>/dev/null; then publish; fi
     rm -rf next-prev && cp -r out/data next-prev && rm -rf prev && mv next-prev prev
   else
     cat scrape.log; echo "::warning::scrape #$i failed"

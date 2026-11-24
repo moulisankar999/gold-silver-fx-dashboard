@@ -3,16 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Gold · Silver · FX — Live</title>
-<meta name="description" content="Live gold and silver: world price, India import duty and GST, and the final cost in India and Chennai. Plus GBP, USD, MYR rates.">
+<title>Gold · Silver · FX — Live rates &amp; prediction</title>
+<meta name="description" content="Live gold and silver: world price, India import duty and GST, India and Chennai prices, tomorrow's predicted rates, plus GBP, USD, MYR.">
 <meta name="theme-color" content="#0b0f17">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/predict.css">
 <script>try{var t=localStorage.getItem('gsfx-theme');if(!t)t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
-<body data-view="simple">
+<body data-view="simple" data-tab="live">
+<script>try{var tb=location.hash==='#predict'?'predict':location.hash==='#live'?'live':localStorage.getItem('gsfx-tab')||'live';document.body.dataset.tab=tb;var vw=localStorage.getItem('gsfx-view');if(vw)document.body.dataset.view=vw;}catch(e){}</script>
 <header class="topbar">
   <div class="brand">
     <img src="assets/icon.svg" alt="" width="34" height="34">
@@ -32,9 +34,24 @@
     <button class="refresh" id="refreshBtn" aria-label="Refresh now"><span class="spin">↻</span> <span id="countdown">--</span></button>
   </div>
 </header>
+<nav class="tabs" role="tablist" aria-label="Section" id="tabSeg">
+  <button role="tab" data-tab="live" aria-selected="true"><span aria-hidden="true">📈</span> Live rates</button>
+  <button role="tab" data-tab="predict" aria-selected="false"><span aria-hidden="true">🔮</span> Prediction</button>
+</nav>
 <div class="ticker" aria-label="Price ticker"><div class="ticker-track" id="ticker"></div></div>
 
-<main id="simple" aria-label="Simple view"><p class="skeleton">Loading prices…</p></main>
+<main id="simple" aria-label="Live rates, simple view"><p class="skeleton">Loading prices…</p></main>
+<main id="psimple" aria-label="Prediction, simple view"><p class="skeleton">Loading predictions…</p></main>
+<main id="pdetail" aria-label="Prediction, detailed view">
+  <div id="p-banner"></div>
+  <section id="p-hero" aria-label="Predicted India rates"><p class="skel">Loading live COMEX and MCX prices…</p></section>
+  <section id="p-chennai" class="blk"></section>
+  <section id="p-inputs" class="blk"></section>
+  <section id="p-methods" class="blk"></section>
+  <section id="p-accuracy" class="blk"></section>
+  <section id="p-how" class="blk"></section>
+  <footer id="p-foot"></footer>
+</main>
 <main id="app">
   <div id="taxbar"></div>
   <div class="statusbar" id="statusbar"></div>
@@ -47,7 +64,7 @@
   <section class="sec" id="sources"></section>
 </main>
 <footer class="foot">
-  <p class="disclaimer">Shop price = IBJA + premium + 3% GST; not financial advice.</p>
+  <p class="disclaimer">Shop price = IBJA + premium + 3% GST; not financial advice. Predictions are estimates.</p>
   <p class="muted small">Times shown in MYT (UTC+8) with IST (UTC+5:30). Every figure shows its source and its own update time. Nothing here is estimated unless marked “calculated”.</p>
 </footer>
 <script type="module" src="assets/app.js"></script>

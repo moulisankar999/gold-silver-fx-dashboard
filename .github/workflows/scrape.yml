@@ -1,4 +1,5 @@
 name: Scrape rates
+# One chained schedule for the whole app: live rates, prediction inputs/prints (data/predict/) and the tax check.
 
 on:
   schedule:
@@ -53,6 +54,15 @@ jobs:
             git show FETCH_HEAD:data/latest.json  > prev/latest.json  || true
             git show FETCH_HEAD:data/history.json > prev/history.json || true
             git show FETCH_HEAD:data/taxes.json   > prev/taxes.json   || rm -f prev/taxes.json
+            mkdir -p prev/predict
+            for f in latest history state; do git show FETCH_HEAD:data/predict/$f.json > prev/predict/$f.json || rm -f prev/predict/$f.json; done
+          fi
+          # First run after the merge: seed the prediction history from the old predictor repo's data branch.
+          if [ ! -f prev/predict/latest.json ]; then
+            mkdir -p prev/predict
+            for f in latest history state; do
+              curl -fsSL "https://raw.githubusercontent.com/moulisankar999/india-gold-rate-predictor/data/data/$f.json" -o prev/predict/$f.json || rm -f prev/predict/$f.json
+            done
           fi
 
       - name: Scrape every 10 min for ~45 min, publish on change

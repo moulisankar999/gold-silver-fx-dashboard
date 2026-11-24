@@ -4,6 +4,7 @@ import {
   ibjaExpectedDate, mjdtaStale, boardLabel, unchangedSince, fmtINR, fmtNum, fmtUSD, dpFor, zoneParts, IST_OFFSET_MIN, MYT_OFFSET_MIN,
   simpleRow, DUTY_SOURCE, G_PER_OZ, leviesOn, taxBreakdown, leviesText,
 } from './calc.js';
+import { initPredict, predictions, setPredictTaxes, setHolidays, refreshPredict, nextIbjaAt } from './predict.js';
 
 // ------------------------------------------------------------ config
 const REPO = 'moulisankar999/gold-silver-fx-dashboard';
@@ -25,6 +26,7 @@ const state = {
   ticks: loadTicks(),
   nextLive: 0,
   taxes: null,
+  holidays: {},
 };
 
 // ------------------------------------------------------------ helpers
@@ -567,6 +569,7 @@ function simpleMetal(metal) {
     { key: 'world', name: 'World', sub: 'International spot price', flag: '🌍', local: null, localPrev: null,
       when: s ? fmtMytIst(s.t) : '—', src: s ? s.source : 'spot unavailable', vsTxt: 'vs previous update' },
     { key: 'india', name: 'India', sub: 'IBJA national benchmark (999)', flag: '🇮🇳', local: ibPerG(ibCur), localPrev: ibPerG(ibPrev),
+      when2: state.holidays[istDay()] ? `Today is an IBJA holiday (${state.holidays[istDay()]}), so no new rates today` : '',
       when: ib?.cur ? `${fmtIbjaDate(ib.d.date)} ${ib.cur.sess} print (${ib.cur.sess === 'PM' ? '5:00 PM' : '12:05 PM'} IST)` : '—', src: 'IBJA (ibjarates.com)', vsTxt: ib?.prev ? `vs ${ib.prev.label} print` : 'vs previous' },
     { key: 'chennai', name: 'Chennai', sub: isGold ? `MJDTA board · 24K (22K ₹${ch22 ? fmtNum(ch22, 0) : '—'}/g)` : 'MJDTA board', flag: '🏙️', local: chCur, localPrev: chPrev,
       when: chWhen, when2: chWhen2, src: ch ? ch.name : 'Chennai unavailable', vsTxt: 'vs previous board print' },
@@ -601,9 +604,11 @@ function simpleMetal(metal) {
       const margin = priceCell(P('margin'), Q('margin'), fxRate, { signed: true, cls: `mgv ${cur.margin >= 0 ? 'prem' : 'disc'}`,
         pct: `${m >= 0 ? "+" : "−"}${Math.abs(m).toFixed(Math.abs(m) < 1 ? 2 : 1)}%`, vsTxt: `${mkt} price incl. GST minus total` });
       const market = priceCell(P('market'), Q('market'), fxRate, { cls: 'mkt', vsTxt: r.vsTxt });
+      const exG = (cur.intl + cur.duty) * f;
       fin = priceCell(P('final'), Q('final'), fxRate, { cls: 'final total', pn: `world + ${dutyTxt} duty + ${gstTxt} GST · no dealer margin`, vsTxt: 'moves with the world price' })
+        + `<div class="nogst">Without GST <b>${fmtINR(exG, dpFor(exG))}</b> <span class="pu">(${fmtUSD(exG / fxRate, exG / fxRate < 100 ? 2 : 0)})</span></div>`
         + `<div class="mg"><div class="mg-l">Dealer margin <span>(market rate)</span> · ${mkt}</div>${margin}`
-        + `<div class="mg-l mk">Market price (${mkt}, incl. GST)</div>${market}</div>`;
+        + `<div class="mg-l mk">Market price (${mkt}, incl. GST)</div>${market}<div class="nogst sm">without GST ${fmtINR(cur.local * f, dpFor(cur.local * f))} (${mkt} board)</div></div>`;
     }
     return `<tr class="row-${r.key}">
       <th scope="row" class="where"><span class="fl" aria-hidden="true">${r.flag}</span><div><b>${r.name}</b><small>${esc(r.sub)}</small><small class="when">${esc(r.when)}</small>${r.when2 ? `<small class="when2">${esc(r.when2)}</small>` : ''}</div></th>
@@ -669,6 +674,7 @@ function renderSimple() {
     </div>
     ${simpleMetal('gold')}
     ${simpleMetal('silver')}
+    ${predictTable()}
     ${simpleFx()}
     <p class="sv-note">▲ up · ▼ down · ▬ no change. World price arrows compare with the previous update; India and Chennai compare with the previous board print. Dollar figures in brackets use today’s USD/INR. Taxes in force today: gold ${esc(leviesText(LEVIES('gold')))}; silver ${esc(leviesText(LEVIES('silver')))} (${esc(taxSourceTxt())}). Checked automatically against CBIC Customs and GST notifications${state.taxes?.checkedAt ? `, last check ${esc(fmtMytIst(state.taxes.checkedAt))}` : ''}; any new levy appears as its own line. Chennai 24K is worked out from the 22K board (× 24 ÷ 22). Boards and IBJA exclude GST, so the market price adds 3% GST to the board rate before the dealer margin is worked out.</p>`;
   el.querySelectorAll('[data-su]').forEach((b) => b.addEventListener('click', () => {
@@ -677,13 +683,114 @@ function renderSimple() {
   saveMemo();
 }
 
+// ------------------------------------------------------------ Today (live) vs Tomorrow (predicted)
+const DOW3 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function istYmd(ms) { return new Date(ms + IST_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
+/** Next MJDTA morning board (~9:30 AM IST, Mon-Sat). */
+function nextMjdta(now = Date.now()) {
+  for (let k = 0; k < 8; k++) {
+    const d = new Date(now + IST_OFFSET_MIN * 60000 + k * 864e5);
+    if (d.getUTCDay() === 0) continue;
+    const t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 9, 30) - IST_OFFSET_MIN * 60000;
+    if (t > now) return t;
+  }
+  return null;
+}
+function whenWord(t) {
+  if (!t) return { head: 'Next print (predicted)', sub: '' };
+  const day = istYmd(t), today = istYmd(Date.now()), tom = istYmd(Date.now() + 864e5);
+  const d = new Date(t + IST_OFFSET_MIN * 60000);
+  const hm = `${((d.getUTCHours() + 11) % 12) + 1}:${String(d.getUTCMinutes()).padStart(2, '0')} ${d.getUTCHours() < 12 ? 'AM' : 'PM'} IST`;
+  const dd = `${DOW3[d.getUTCDay()]} ${d.getUTCDate()} ${MON3[d.getUTCMonth()]}`;
+  return { head: day === today ? 'Later today (predicted)' : day === tom ? 'Tomorrow (predicted)' : `${DOW3[d.getUTCDay()]} (predicted)`, sub: `${dd}, ${hm}`, day };
+}
+function moveWords(pred, today, dp, unitTxt) {
+  if (!(pred > 0) || !(today > 0)) return { cls: 'flat', ar: '▬', txt: '' };
+  const d = pred - today, rel = Math.abs(d) / today;
+  if (rel < 0.0008) return { cls: 'flat', ar: '▬', txt: 'likely about the same' };
+  return { cls: d > 0 ? 'up' : 'down', ar: d > 0 ? '▲' : '▼', txt: `likely ${d > 0 ? 'up' : 'down'} ${fmtINR(Math.abs(d), dp)}` };
+}
+function predictModel() {
+  const R = predictions();
+  if (!R) return null;
+  const { P } = R;
+  const s = resolveSpot('xau'), a = resolveSpot('xag'), fx = usdInr();
+  const wg = s && fx ? (s.usd / G_PER_OZ) * fx.rate * 10 : null;   // world 24K per 10 g
+  const ws = a && fx ? a.usd * OZ_PER_KG * fx.rate : null;         // world silver per kg
+  const gstR = taxBreakdown(100, LEVIES('gold')).gstRate;
+  const ch = (p, mult) => (p && p.p ? { p: p.p * mult, lo: p.lo * mult, hi: p.hi * mult, last: p.last ? p.last.value * mult : null, lastWhen: p.last, bt: p.bt } : null);
+  const naiveBetter = (p) => p?.bt?.naive && p?.bt?.M && p.bt.naive.mape < p.bt.M.mape;
+  const rows = [
+    { key: 'g24', name: 'Gold 24K', unit: 'per 10 g', dp: 0, world: wg, india: ch(P.ibja_g, 1), chennai: ch(P.ch_g24, 10), chNaive: naiveBetter(P.ch_g22) },
+    { key: 'g22', name: 'Gold 22K', unit: 'per 10 g', dp: 0, world: wg ? (wg * 22) / 24 : null, india: P.ibja_g22 ? { ...ch(P.ibja_g22, 1), last: P.ibja_g22.last?.value, lastWhen: P.ibja_g22.last } : null, chennai: ch(P.ch_g22, 10), chNaive: naiveBetter(P.ch_g22) },
+    { key: 'ag', name: 'Silver', unit: 'per kg', dp: 0, world: ws, india: ch(P.ibja_s, 1), chennai: ch(P.ch_s, 1000), chNaive: naiveBetter(P.ch_s), inNaive: naiveBetter(P.ibja_s) },
+  ];
+  return { R, rows, gstR, ib: whenWord(R.nextIbja), mj: whenWord(nextMjdta()), fx };
+}
+function predictTable(opts = {}) {
+  const M = predictModel();
+  if (!M) return `<section class="pt-card"><div class="sv-h"><div><div class="kicker">Today vs tomorrow</div><h2>🔮 Predicted rates</h2></div></div><p class="skeleton">Loading predictions…</p></section>`;
+  const { rows, gstR, ib, mj } = M;
+  const g = (v) => (v > 0 ? `<small class="gst">incl. GST ${fmtINR(v * (1 + gstR), 0)}</small>` : '');
+  const today = (v, when, dp, gst = true) => (v > 0 ? `<div class="pt-v">${fmtINR(v, dp)}</div>${gst ? g(v) : ''}${when ? `<small class="pt-w">${esc(when)}</small>` : ''}` : '<div class="pt-v na">—</div>');
+  const tomorrow = (p, todayV, dp, naive) => {
+    if (!p || !(p.p > 0)) return '<div class="pt-v na">—</div><small class="pt-w">not enough data yet</small>';
+    if (naive && todayV > 0) {
+      return `<div class="pt-v">${fmtINR(todayV, dp)}</div><span class="pd flat">▬ likely no change</span><small class="pt-w">board moves rarely · model ${fmtINR(p.p, dp)}</small>`;
+    }
+    const w = moveWords(p.p, todayV, dp);
+    return `<div class="pt-v pred">${fmtINR(p.p, dp)}</div><span class="pd ${w.cls}">${w.ar} ${esc(w.txt)}</span>${g(p.p)}<small class="pt-w">range ${fmtINR(p.lo, dp)} – ${fmtINR(p.hi, dp)}</small>`;
+  };
+  const lw = (l) => (l ? `${fmtIbjaDate(l.date)} ${l.sess === 'Morning' ? 'AM' : l.sess === 'Evening' ? 'PM' : l.sess || ''}`.trim() : '');
+  const body = rows.map((r) => `<tr class="pt-${r.key}">
+      <th scope="row"><b>${r.name}</b><small>${r.unit}</small></th>
+      <td class="pt-world" data-l="🌍 World · today (live)">${today(r.world, 'spot, no Indian tax', r.dp, false)}</td>
+      <td class="pt-world pt-t" data-l="🌍 World · tomorrow">${r.world ? '<div class="pt-v na">Not forecast</div><small class="pt-w">moves with global markets; the India and Chennai forecasts assume it stays near today’s level</small>' : '—'}</td>
+      <td data-l="🇮🇳 India (IBJA) · today">${today(r.india?.last, `last print ${lw(r.india?.lastWhen)}`, r.dp)}</td>
+      <td class="pt-t" data-l="🇮🇳 India · ${esc(ib.head)}">${tomorrow(r.india, r.india?.last, r.dp, r.inNaive)}</td>
+      <td data-l="🏙️ Chennai (MJDTA) · today">${today(r.chennai?.last, `board ${lw(r.chennai?.lastWhen)}${r.key === 'g24' ? ' · from 22K' : ''}`, r.dp)}</td>
+      <td class="pt-t" data-l="🏙️ Chennai · ${esc(mj.head)}">${tomorrow(r.chennai, r.chennai?.last, r.dp, r.chNaive)}</td>
+    </tr>`).join('');
+  const bt = M.R.bt || {};
+  const acc = (k) => (bt[k]?.M ? `${(bt[k].M.mape * 100).toFixed(1)}%` : '—');
+  return `<section class="pt-card ${opts.big ? 'big' : ''}">
+    <div class="sv-h"><div><div class="kicker">Today (live) vs ${esc(ib.head.replace(' (predicted)', '').toLowerCase())} (predicted)</div><h2>🔮 Gold &amp; silver: today and next board</h2>
+      <p class="sv-sub">Board prices before GST (GST-inclusive shown under each). Next India print: <b>${esc(ib.sub)}</b> · next Chennai board: <b>${esc(mj.sub)}</b>.</p></div></div>
+    <div class="pt-tbl"><table class="pt">
+      <thead>
+        <tr class="grp"><th rowspan="2">Metal</th><th colspan="2">🌍 World</th><th colspan="2">🇮🇳 India · IBJA</th><th colspan="2">🏙️ Chennai · MJDTA</th></tr>
+        <tr><th>Today<small>live</small></th><th class="pt-t">Tomorrow<small>not forecast</small></th><th>Today<small>latest print</small></th><th class="pt-t">${esc(ib.head.replace(' (predicted)', ''))}<small>predicted · ${esc(ib.sub)}</small></th><th>Today<small>latest board</small></th><th class="pt-t">${esc(mj.head.replace(' (predicted)', ''))}<small>predicted · ${esc(mj.sub)}</small></th></tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table></div>
+    <p class="sv-note">How it works: today’s COMEX and MCX prices and the rupee, plus how far each board has recently sat from them, give the next board rate. Range = how far off it has been lately (80% of the time inside). Typical miss: 24K India ${acc('ibja_g')}, silver India ${acc('ibja_s')}, 22K Chennai ${acc('ch_g22')}, silver Chennai ${acc('ch_s')}. ${M.R.manual ? '<b>Using your own input values (Prediction → Detailed).</b> ' : ''}Estimate only, not financial advice.</p>
+  </section>`;
+}
+function renderPsimple() {
+  const el = $('#psimple'); if (!el) return;
+  el.innerHTML = `<div class="sv-hero"><div><h2>What will gold &amp; silver cost next?</h2><p>Today’s live rates next to the predicted next board rate, for India (IBJA) and Chennai (MJDTA).</p></div>
+    <span class="pill"><span class="dot ${predictions() ? 'on' : 'wait'}"></span>${predictions() ? `Model data · ${esc(fmtMytIst(predictions().generatedAt))}` : 'Loading…'}</span></div>
+    ${taxBanner()}${predictTable({ big: true })}`;
+}
+
+// Tab switch: "Live rates" (the dashboard) and "Prediction" (the predictor), each with Simple / Detailed.
+function setTab(t, push = true) {
+  const tab = t === 'predict' ? 'predict' : 'live';
+  document.body.dataset.tab = tab;
+  try { localStorage.setItem('gsfx-tab', tab); } catch { /* ignore */ }
+  document.querySelectorAll('#tabSeg button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  if (push) history.replaceState(null, '', tab === 'predict' ? '#predict' : document.body.dataset.view === 'detailed' ? '#detailed' : location.pathname + location.search);
+  if (tab === 'predict') renderPsimple();
+  window.scrollTo({ top: 0 });
+}
+
 // View switch: Simple is the default landing view; "Detailed" is the original dashboard.
 function setView(v, push = true) {
   const view = v === 'detailed' ? 'detailed' : 'simple';
   document.body.dataset.view = view;
   try { sessionStorage.setItem('gsfx-view', view); } catch { /* ignore */ }
   document.querySelectorAll('#viewSeg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.view === view)));
-  if (push) history.replaceState(null, '', view === 'detailed' ? '#detailed' : location.pathname + location.search);
+  if (push) history.replaceState(null, '', document.body.dataset.tab === 'predict' ? '#predict' : view === 'detailed' ? '#detailed' : location.pathname + location.search);
   window.scrollTo({ top: 0 });
 }
 
@@ -712,9 +819,18 @@ async function loadScraped() {
   }
 }
 
+function feedPredictTaxes() {
+  const at = (metal, iso) => taxBreakdown(100, leviesOn(state.taxes, metal, new Date((iso ? Date.parse(iso) : Date.now()) + IST_OFFSET_MIN * 60000).toISOString().slice(0, 10)));
+  const g = at('gold');
+  setPredictTaxes({ duty: g.dutyPct, gst: g.gstRate, dutyAt: (metal, iso) => at(metal, iso).dutyPct });
+}
+async function loadHolidays() {
+  try { const h = await getJSON(`config/ibja-holidays.json?t=${Math.floor(Date.now() / 36e5)}`); state.holidays = h.days || {}; setHolidays(Object.keys(state.holidays)); } catch { /* ignore */ }
+}
 async function loadTaxes() {
   try { state.taxes = await getJSON(`${DATA_BASE}taxes.json?t=${Date.now()}`); }
   catch { try { state.taxes = state.taxes || await getJSON(`config/taxes.json?t=${Date.now()}`); } catch { /* defaults */ } }
+  feedPredictTaxes();
   try { renderSimple(); renderBreakdown(); renderStatus(); } catch { /* ignore */ }
 }
 
@@ -776,6 +892,8 @@ function clock() {
 
 // ------------------------------------------------------------ boot
 document.querySelectorAll('#viewSeg button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+document.querySelectorAll('#tabSeg button').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+setTab(location.hash === '#predict' ? 'predict' : location.hash === '#detailed' || location.hash === '#live' ? 'live' : (localStorage.getItem('gsfx-tab') || 'live'), false);
 setView(location.hash === '#detailed' ? 'detailed' : (sessionStorage.getItem('gsfx-view') || 'simple'), false);
 document.querySelectorAll('#unitSeg button').forEach((b) => b.addEventListener('click', () => {
   state.unit = b.dataset.unit; localStorage.setItem('gsfx-unit', state.unit); renderAll();
@@ -785,12 +903,13 @@ $('#themeBtn').addEventListener('click', () => {
   document.documentElement.dataset.theme = t; localStorage.setItem('gsfx-theme', t);
   document.querySelector('meta[name=theme-color]').setAttribute('content', t === 'dark' ? '#0b0f17' : '#f3f5fa');
 });
-$('#refreshBtn').addEventListener('click', () => refresh(true));
+$('#refreshBtn').addEventListener('click', () => { refresh(true); refreshPredict(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() >= state.nextLive) refresh(); });
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 try { state.scraped = JSON.parse(localStorage.getItem('gsfx-scraped')); } catch { /* ignore */ }
 renderAll();
 refresh(true);
+loadHolidays().finally(() => initPredict({ holidays: Object.keys(state.holidays), onChange: () => { try { renderSimple(); renderPsimple(); } catch (e) { console.warn(e); } } }));
 setInterval(clock, 1000);
 clock();
