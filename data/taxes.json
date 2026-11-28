@@ -1,0 +1,150 @@
+{
+ "version": 1,
+ "about": "Every levy on imported gold (HS 7108) and silver (HS 7106). base: 'value' = % of the international (assessable) value; 'duty' = % of total customs duty (like a surcharge on duty); 'cumulative' = % of the running total so far (GST). group: 'duty' lines are import duty, 'gst' lines are sales tax. Rates change only through history[] entries with an effective date.",
+ "updatedAt": "2026-11-27T14:25:29Z",
+ "checkedAt": "2026-11-28T08:42:10Z",
+ "metals": {
+  "gold": {
+   "hs": "7108",
+   "levies": [
+    {
+     "id": "bcd",
+     "name": "Basic customs duty",
+     "short": "BCD",
+     "group": "duty",
+     "base": "value",
+     "history": [
+      {
+       "from": "2024-07-24",
+       "rate": 0.05,
+       "ref": "Notification 30/2024-Customs (Budget 2024)"
+      },
+      {
+       "from": "2026-05-13",
+       "rate": 0.1,
+       "ref": "Notification 15/2026-Customs"
+      }
+     ]
+    },
+    {
+     "id": "aidc",
+     "name": "Agriculture Infrastructure & Development Cess",
+     "short": "AIDC",
+     "group": "duty",
+     "base": "value",
+     "history": [
+      {
+       "from": "2024-07-24",
+       "rate": 0.01,
+       "ref": "Notification 31/2024-Customs (Budget 2024)"
+      },
+      {
+       "from": "2026-05-13",
+       "rate": 0.05,
+       "ref": "Notification 16/2026-Customs"
+      }
+     ]
+    },
+    {
+     "id": "gst",
+     "name": "GST (IGST on imports / CGST + SGST)",
+     "short": "GST",
+     "group": "gst",
+     "base": "cumulative",
+     "history": [
+      {
+       "from": "2017-07-01",
+       "rate": 0.03,
+       "ref": "Notification 1/2017-Integrated Tax (Rate), Schedule VI"
+      }
+     ]
+    }
+   ]
+  },
+  "silver": {
+   "hs": "7106",
+   "levies": [
+    {
+     "id": "bcd",
+     "name": "Basic customs duty",
+     "short": "BCD",
+     "group": "duty",
+     "base": "value",
+     "history": [
+      {
+       "from": "2024-07-24",
+       "rate": 0.05,
+       "ref": "Notification 30/2024-Customs (Budget 2024)"
+      },
+      {
+       "from": "2026-05-13",
+       "rate": 0.1,
+       "ref": "Notification 15/2026-Customs"
+      }
+     ]
+    },
+    {
+     "id": "aidc",
+     "name": "Agriculture Infrastructure & Development Cess",
+     "short": "AIDC",
+     "group": "duty",
+     "base": "value",
+     "history": [
+      {
+       "from": "2024-07-24",
+       "rate": 0.01,
+       "ref": "Notification 31/2024-Customs (Budget 2024)"
+      },
+      {
+       "from": "2026-05-13",
+       "rate": 0.05,
+       "ref": "Notification 16/2026-Customs"
+      }
+     ]
+    },
+    {
+     "id": "gst",
+     "name": "GST (IGST on imports / CGST + SGST)",
+     "short": "GST",
+     "group": "gst",
+     "base": "cumulative",
+     "history": [
+      {
+       "from": "2017-07-01",
+       "rate": 0.03,
+       "ref": "Notification 1/2017-Integrated Tax (Rate), Schedule VI"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "sources": [
+  {
+   "title": "India hikes import duty on gold and silver to 15% (Business Standard, 13 May 2026)",
+   "url": "https://www.business-standard.com/economy/news/india-hikes-import-duty-on-gold-and-silver-to-15-platinum-to-15-4-126051300762_1.html"
+  },
+  {
+   "title": "CBIC tax information portal: Customs and GST notifications",
+   "url": "https://taxinformation.cbic.gov.in/"
+  }
+ ],
+ "changes": [],
+ "alerts": [],
+ "seen": [
+  "cbic:1003360",
+  "cbic:1003361",
+  "cbic:1003362",
+  "cbic:1010787",
+  "cbic:1010792",
+  "cbic:1010797",
+  "cbic:1010830",
+  "cbic:1010834",
+  "cbic:1010836",
+  "cbic:1010837",
+  "cbic:1010838",
+  "cbic:1010839",
+  "cbic:1010840",
+  "cbic:1010841"
+ ]
+}
